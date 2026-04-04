@@ -68,12 +68,13 @@ float heading      = 0;
 float gyroZ_offset = 0;
 unsigned long lastIMURead = 0;
 
+void broadcastSensorData();
 float readGyroZ() {
   Wire.beginTransmission(MPU6050_ADDR);
   Wire.write(0x47);
   Wire.endTransmission(false);
   // ✅ FIX 1: false = non-blocking, stops I2C from stalling the loop
-  Wire.requestFrom(MPU6050_ADDR, 2, false);
+  Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)14, (uint8_t)true);
   int16_t raw = (Wire.read() << 8) | Wire.read();
   return (float)raw / 131.0;
 }
