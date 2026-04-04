@@ -1,10 +1,8 @@
 #include "StateMachine.h"
 
-// --- Global Mailboxes ---
-// These must be created in your main.cpp setup()!
 QueueHandle_t guiMailbox;
 QueueHandle_t pidMailbox;
-
+QueueHandle_t armMailbox;
 extern HardwareSerial CAM_UART;
 extern HardwareSerial ARM_UART;
 
@@ -42,29 +40,13 @@ void MasterStateMachine::update() {
 
     // 3. THE AUTONOMOUS ROUTER
     switch (currentState) {
-        
-        // ==========================================
-        // MANUAL CONTROL (GUI to PID Routing)
-        // ==========================================
         case RobotState::MANUAL_MODE: {
-            // Package the GUI joystick commands into a PID target struct
-            VelocityTarget new_target;
-            new_target.v_x = local_gui.cmd_payload.drive_vx;
-            new_target.v_y = local_gui.cmd_payload.drive_vy;
-            new_target.omega = local_gui.cmd_payload.drive_omega;
-            
-            // WRITE TO PID: Shove the target into the PID mailbox.
-            // Overwrite ensures the PID always has the absolute newest instruction.
-            xQueueOverwrite(pidMailbox, &new_target);
-            
-            // Send Arm Angles over UART (Skeleton placeholder)
-            // ARM_UART.printf("..."); 
+            xQueueOverwrite(pidMailbox, &local_gui.base_motion);
+            xQueueOverwrite(armMailbox, &local_gui.arm_motion);
             break;
         }
 
-        // ==========================================
-        // HYBRID PICK SEQUENCE (Skeletons)
-        // ==========================================
+
         case RobotState::START_PICK_SEQUENCE:
             Serial.println("SKELETON: Triggering QR Scan...");
             // CAM_UART.println("SCAN_QR");
@@ -73,18 +55,13 @@ void MasterStateMachine::update() {
             break;
 
         case RobotState::WAIT_FOR_VISION_QR:
-            // SKELETON: Wait for Eyad's camera payload over UART
-            // If Match -> ARM_UART.println("PICK ...") -> Goto WAIT_FOR_ARM_PICK
+
             break;
 
         case RobotState::WAIT_FOR_ARM_PICK:
-            // SKELETON: Wait for "BOX_PICKED" over UART from Joe
-            // If Success -> Log to storage -> Goto START_PICK_SEQUENCE
+
             break;
 
-        // ==========================================
-        // DROP SEQUENCE (Skeletons)
-        // ==========================================
         case RobotState::START_AUTO_DROP_SEQUENCE:
             Serial.println("SKELETON: Navigating to Drop Zone...");
             // Path Planner Integration Goes Here

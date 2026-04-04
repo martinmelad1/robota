@@ -4,6 +4,8 @@
 #include <LittleFS.h>
 #include <Wire.h>
 #include <ESP32Servo.h>
+#include "WorldState.h"
+#include "StateMachine.h"
 
 const char* ap_ssid     = "RobotController";
 const char* ap_password = "robot1234";
@@ -11,6 +13,11 @@ const char* ap_password = "robot1234";
 AsyncWebServer server(80);
 AsyncWebSocket  ws("/ws");
 
+MasterStateMachine robotBrain;
+QueueHandle_t guiMailbox;
+QueueHandle_t pidMailbox;
+QueueHandle_t armMailbox;
+TaskHandle_t BrainTask;
 // ── PIN DEFINITIONS ───────────────────────────────────────────
 #define MTR_FL_PWM   2
 #define MTR_FL_IN1   4
@@ -275,6 +282,9 @@ void broadcastSensorData() {
 // ── SETUP ─────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
+  guiMailbox = xQueueCreate(1, sizeof(GUIPacket));
+  pidMailbox = xQueueCreate(1, sizeof(ChassisMotion));
+  armMailbox = xQueueCreate(1, sizeof(ArmMotion));
 
   pinMode(MTR_FL_IN1, OUTPUT); pinMode(MTR_FL_IN2, OUTPUT);
   pinMode(MTR_FR_IN1, OUTPUT); pinMode(MTR_FR_IN2, OUTPUT);
