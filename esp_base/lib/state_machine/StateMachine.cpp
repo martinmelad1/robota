@@ -1,8 +1,8 @@
 #include "StateMachine.h"
 
-QueueHandle_t guiMailbox;
-QueueHandle_t pidMailbox;
-QueueHandle_t armMailbox;
+extern QueueHandle_t guiMailbox;
+extern QueueHandle_t pidMailbox;
+extern QueueHandle_t armMailbox;
 extern HardwareSerial CAM_UART;
 extern HardwareSerial ARM_UART;
 
