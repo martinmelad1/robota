@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Robot Control</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: sans-serif;
+    background: #0f1117;
+    color: #e2e8f0;
+    padding: 12px;
+    user-select: none;
+  }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .header h1 { font-size: 16px; color: #a78bfa; }
+  #conn { font-size: 11px; }
+  .connected    { color: #34d399; }
+  .disconnected { color: #ef4444; }
+
+  .estop {
+    width: 100%; padding: 14px;
+    background: #450a0a; border: 2px solid #ef4444;
+    border-radius: 12px; color: #ef4444;
+    font-size: 16px; font-weight: 700; letter-spacing: 2px;
+    margin-bottom: 10px; cursor: pointer; touch-action: manipulation;
+  }
+  .estop:active { background: #ef4444; color: #fff; }
+
+  .mode-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+  .mode-btn {
+    padding: 10px; border-radius: 10px; font-size: 12px; font-weight: 600;
+    text-align: center; cursor: pointer; touch-action: manipulation;
+    border: 1px solid; transition: all 0.15s;
+  }
+  .mode-manual        { background: #0f1a2e; border-color: #2c4a7a; color: #60a5fa; }
+  .mode-manual.active { background: #1a3a6a; border-color: #60a5fa; color: #fff; }
+  .mode-auto          { background: #0f2a1a; border-color: #1a5a30; color: #34d399; }
+  .mode-auto.active   { background: #1a4a2a; border-color: #34d399; color: #fff; }
+
+  .mode-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px; }
+  .badge-manual { background: #1a3a6a; color: #60a5fa; }
+  .badge-auto   { background: #1a4a2a; color: #34d399; }
+
+  .sec-label { font-size: 10px; color: #7c83a0; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; margin-top: 10px; }
+
+  .dpad {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: repeat(3, 68px); gap: 5px; margin-bottom: 4px;
+  }
+  .btn {
+    background: #1e2130; border: 1px solid #2d3150; border-radius: 10px;
+    color: #e2e8f0; font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 2px;
+    cursor: pointer; touch-action: manipulation;
+    transition: background 0.08s, transform 0.08s;
+  }
+  .btn span.lbl { font-size: 9px; color: #7c83a0; }
+  .btn:active   { background: #a78bfa; transform: scale(0.92); }
+  .btn.diag     { background: #161825; border-color: #252840; color: #7c83a0; font-size: 18px; }
+  .btn.diag:active { background: #534AB7; color: #fff; }
+  .btn.stop-center { background: #450a0a; border: 1px solid #ef4444; color: #ef4444; font-size: 11px; font-weight: 700; }
+  .btn.stop-center:active { background: #ef4444; color: #fff; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .btn-rot {
+    background: #1e2130; border: 1px solid #2d3150; border-radius: 10px;
+    color: #a78bfa; font-size: 14px; padding: 12px 6px; text-align: center;
+    cursor: pointer; touch-action: manipulation;
+    transition: background 0.08s, transform 0.08s;
+  }
+  .btn-rot:active { background: #a78bfa; color: #fff; transform: scale(0.93); }
+
+  .joint-row { display: grid; grid-template-columns: 36px 1fr 1fr; gap: 5px; align-items: center; margin-bottom: 5px; }
+  .joint-label { font-size: 11px; font-weight: 700; color: #7c83a0; text-align: center; background: #1e2130; border-radius: 6px; padding: 6px 0; }
+  .btn-arm {
+    background: #0f2a1a; border: 1px solid #34d399; border-radius: 10px;
+    color: #34d399; font-size: 13px; padding: 13px 6px; text-align: center;
+    cursor: pointer; touch-action: manipulation;
+    transition: background 0.08s, transform 0.08s;
+  }
+  .btn-arm:active { background: #34d399; color: #000; transform: scale(0.93); }
+
+  .btn-grip-toggle {
+    width: 100%; padding: 16px; border-radius: 12px;
+    font-size: 15px; font-weight: 700; text-align: center;
+    cursor: pointer; touch-action: manipulation;
+    transition: all 0.15s; border: 2px solid; margin-top: 6px;
+  }
+  .grip-open  { background: #0f1a2e; border-color: #60a5fa; color: #60a5fa; }
+  .grip-close { background: #1a0f2e; border-color: #a78bfa; color: #a78bfa; }
+  .btn-grip-toggle:active { transform: scale(0.96); }
+
+  .divider { border: none; border-top: 1px solid #1e2130; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Robot Control</h1>
+  <span id="conn" class="disconnected">● Connecting...</span>
+</div>
+
+<button class="estop" onpointerdown="emergencyStop()">&#9632; EMERGENCY STOP</button>
+
+<div class="mode-row">
+  <div class="mode-btn mode-manual active" id="btn-manual" onpointerdown="setMode('MANUAL')">Manual Mode</div>
+  <div class="mode-btn mode-auto" id="btn-auto" onpointerdown="setMode('AUTO')">Autonomous Mode</div>
+</div>
+<div id="mode-badge" class="mode-badge badge-manual">MANUAL MODE</div>
+
+<hr class="divider">
+
+<div class="sec-label">Movement — hold to move, release to stop</div>
+<div class="dpad">
+  <div class="btn diag"   onpointerdown="send('FWD_LEFT')"  onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x2196;<span class="lbl">fwd-left</span></div>
+  <div class="btn"        onpointerdown="send('FWD')"       onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x25B2;<span class="lbl">forward</span></div>
+  <div class="btn diag"   onpointerdown="send('FWD_RIGHT')" onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x2197;<span class="lbl">fwd-right</span></div>
+  <div class="btn"        onpointerdown="send('LEFT')"      onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x25C4;<span class="lbl">strafe L</span></div>
+  <div class="btn stop-center" onpointerdown="send('STOP')">STOP</div>
+  <div class="btn"        onpointerdown="send('RIGHT')"     onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x25BA;<span class="lbl">strafe R</span></div>
+  <div class="btn diag"   onpointerdown="send('BWD_LEFT')"  onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x2199;<span class="lbl">bwd-left</span></div>
+  <div class="btn"        onpointerdown="send('BWD')"       onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x25BC;<span class="lbl">backward</span></div>
+  <div class="btn diag"   onpointerdown="send('BWD_RIGHT')" onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x2198;<span class="lbl">bwd-right</span></div>
+</div>
+
+<div class="sec-label">Rotation — hold to rotate, release to stop</div>
+<div class="two-col">
+  <div class="btn-rot" onpointerdown="send('ROT_L')" onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x21BA; Rotate Left</div>
+  <div class="btn-rot" onpointerdown="send('ROT_R')" onpointerup="send('STOP')" onpointercancel="send('STOP')">&#x21BB; Rotate Right</div>
+</div>
+
+<hr class="divider">
+
+<div class="sec-label">Arm — 4 joints — hold to move, release to stop</div>
+
+<div class="joint-row">
+  <div class="joint-label">J1</div>
+  <div class="btn-arm" onpointerdown="send('J1_UP')"   onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25B2; Up</div>
+  <div class="btn-arm" onpointerdown="send('J1_DOWN')" onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25BC; Down</div>
+</div>
+<div class="joint-row">
+  <div class="joint-label">J2</div>
+  <div class="btn-arm" onpointerdown="send('J2_UP')"   onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25B2; Up</div>
+  <div class="btn-arm" onpointerdown="send('J2_DOWN')" onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25BC; Down</div>
+</div>
+<div class="joint-row">
+  <div class="joint-label">J3</div>
+  <div class="btn-arm" onpointerdown="send('J3_UP')"   onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25B2; Up</div>
+  <div class="btn-arm" onpointerdown="send('J3_DOWN')" onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25BC; Down</div>
+</div>
+<div class="joint-row">
+  <div class="joint-label">J4</div>
+  <div class="btn-arm" onpointerdown="send('J4_UP')"   onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25B2; Up</div>
+  <div class="btn-arm" onpointerdown="send('J4_DOWN')" onpointerup="send('ARM_STOP')" onpointercancel="send('ARM_STOP')">&#x25BC; Down</div>
+</div>
+
+<hr class="divider">
+
+<div class="sec-label">J5 — Gripper (tap to toggle)</div>
+<div id="grip-btn" class="btn-grip-toggle grip-open" onpointerdown="toggleGripper()">
+  &#x1F91C; Gripper — OPEN
+</div>
+
+<script>
+  const ESP32_IP = "192.168.4.1";
+  const connEl  = document.getElementById("conn");
+  const gripBtn = document.getElementById("grip-btn");
+  let ws;
+  let gripperOpen = true;
+
+  function connect() {
+    ws = new WebSocket("ws://" + ESP32_IP + "/ws");
+    ws.onopen  = () => { connEl.textContent = "● Connected"; connEl.className = "connected"; };
+    ws.onclose = () => { connEl.textContent = "● Disconnected"; connEl.className = "disconnected"; setTimeout(connect, 2000); };
+
+    // ✅ FIX: drain incoming broadcast frames so the send queue never backs up
+    ws.onmessage = () => {};
+  }
+
+  connect();
+
+  function send(cmd) {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
+  }
+
+  function emergencyStop() {
+    send("ESTOP");
+    document.body.style.background = "#450a0a";
+    setTimeout(() => { document.body.style.background = "#0f1117"; }, 300);
+  }
+
+  function setMode(mode) {
+    send("MODE_" + mode);
+    const manualBtn = document.getElementById("btn-manual");
+    const autoBtn   = document.getElementById("btn-auto");
+    const badge     = document.getElementById("mode-badge");
+    if (mode === "MANUAL") {
+      manualBtn.classList.add("active"); autoBtn.classList.remove("active");
+      badge.textContent = "MANUAL MODE"; badge.className = "mode-badge badge-manual";
+    } else {
+      autoBtn.classList.add("active"); manualBtn.classList.remove("active");
+      badge.textContent = "AUTONOMOUS MODE"; badge.className = "mode-badge badge-auto";
+    }
+  }
+
+  function toggleGripper() {
+    gripperOpen = !gripperOpen;
+    if (gripperOpen) {
+      send("GRIP_OPEN");
+      gripBtn.innerHTML = "&#x1F91C; Gripper &mdash; OPEN";
+      gripBtn.className = "btn-grip-toggle grip-open";
+    } else {
+      send("GRIP_CLOSE");
+      gripBtn.innerHTML = "&#x270A; Gripper &mdash; CLOSED";
+      gripBtn.className = "btn-grip-toggle grip-close";
+    }
+  }
+</script>
+</body>
+</html>
