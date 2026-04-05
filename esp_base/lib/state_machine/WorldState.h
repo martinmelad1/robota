@@ -34,7 +34,7 @@ struct ChassisMotion {
     DriveCommand move_type; 
     float speed;            
     float omega;     
-}
+};
 
 enum class GripperStatus {
 CLOSED,
