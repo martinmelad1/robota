@@ -52,9 +52,6 @@ struct ArmMotion {
     ArmDir direction; // No more magic characters!
 };
 
-
-struct GUIPacket {
-    GUITrigger mode_trigger;
-    ChassisMotion base_motion;
-    ArmMotion arm_motion;
-};
+struct StringMessage {
+    char data[32];
+};

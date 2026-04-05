@@ -21,8 +21,12 @@ private:
     int currentBoxTarget;
     int currentZoneTarget;
 
+    String lastCommand = "IDLE";
+    String currentModeStr = "MANUAL";
+
 public:
     MasterStateMachine();
     void init();
     void update();
+    String getTelemetryJSON();
 };

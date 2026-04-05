@@ -9,69 +9,184 @@ extern HardwareSerial ARM_UART;
 // (Memory Arrays initialized here - skipped for brevity)
 
 MasterStateMachine::MasterStateMachine() {
-    currentState = RobotState::MANUAL_MODE;
+  currentState = RobotState::MANUAL_MODE;
 }
 
 void MasterStateMachine::init() {
-    Serial.println("SYSTEM BOOT: Master Logic Online.");
+  Serial.println("SYSTEM BOOT: Master Logic Online.");
+}
+
+String MasterStateMachine::getTelemetryJSON() {
+  String json = "{";
+  json += "\"cmd\":\"" + lastCommand + "\",";
+  json += "\"mode\":\"" + currentModeStr + "\",";
+  json += "\"px\":0.0, \"py\":0.0, \"hdg\":0.0,";
+  json += "\"fl\":0.0, \"fr\":0.0, \"rl\":0.0, \"rr\":0.0,";
+  json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0, \"j4\":0.0,";
+  json += "\"grip\":1";
+  json += "}";
+  return json;
 }
 
 void MasterStateMachine::update() {
-    GUIPacket local_gui;
-    
-    // 1. READ FROM GUI: Peek at the GUI Mailbox. 
-    // The '0' means if the box is empty, don't wait, just skip to the else block.
-    if (xQueuePeek(guiMailbox, &local_gui, 0) != pdTRUE) {
-        // If we haven't received a single Wi-Fi packet yet, just return and do nothing.
-        return; 
+  StringMessage msg;
+
+  // 1. READ FROM GUI
+  if (xQueueReceive(guiMailbox, &msg, 0) == pdTRUE) {
+    String cmdStr = String(msg.data);
+    lastCommand = cmdStr;
+    Serial.println("SM Received CMD: " + cmdStr);
+
+    GUITrigger mode_trigger = GUITrigger::NONE;
+    ChassisMotion base_motion;
+    base_motion.move_type = DriveCommand::CMD_STOP;
+    base_motion.speed = 0.5;
+    base_motion.omega = 0.0;
+
+    ArmMotion arm_motion;
+    arm_motion.joint_id = 0;
+    arm_motion.direction = ArmDir::STOP;
+
+    bool isMotionCmd = false;
+
+    if (cmdStr == "ESTOP") {
+      base_motion.move_type = DriveCommand::CMD_STOP;
+      lastCommand = "EMERGENCY STOP";
+      isMotionCmd = true;
+
+      // ESTOP also acts as the Manual button
+      mode_trigger = GUITrigger::TRIGGER_MANUAL;
+      currentModeStr = "MANUAL";
+    } else if (cmdStr == "MODE_MANUAL") {
+      mode_trigger = GUITrigger::TRIGGER_MANUAL;
+      currentModeStr = "MANUAL";
+    } else if (cmdStr == "MODE_AUTO") {
+      mode_trigger = GUITrigger::TRIGGER_AUTO;
+      currentModeStr = "AUTONOMOUS";
+    } else if (cmdStr == "PICK_MODE") {
+      mode_trigger = GUITrigger::TRIGGER_PICK;
+      currentModeStr = "PICK";
+    } else if (cmdStr == "FWD") {
+      base_motion.move_type = DriveCommand::CMD_FWD;
+      isMotionCmd = true;
+    } else if (cmdStr == "BWD") {
+      base_motion.move_type = DriveCommand::CMD_BWD;
+      isMotionCmd = true;
+    } else if (cmdStr == "LEFT") {
+      base_motion.move_type = DriveCommand::CMD_LEFT;
+      isMotionCmd = true;
+    } else if (cmdStr == "RIGHT") {
+      base_motion.move_type = DriveCommand::CMD_RIGHT;
+      isMotionCmd = true;
+    } else if (cmdStr == "FWD_LEFT") {
+      base_motion.move_type = DriveCommand::CMD_FWD_L;
+      isMotionCmd = true;
+    } else if (cmdStr == "FWD_RIGHT") {
+      base_motion.move_type = DriveCommand::CMD_FWD_R;
+      isMotionCmd = true;
+    } else if (cmdStr == "BWD_LEFT") {
+      base_motion.move_type = DriveCommand::CMD_BWD_L;
+      isMotionCmd = true;
+    } else if (cmdStr == "BWD_RIGHT") {
+      base_motion.move_type = DriveCommand::CMD_BWD_R;
+      isMotionCmd = true;
+    } else if (cmdStr == "ROT_L") {
+      base_motion.move_type = DriveCommand::CMD_ROT_L;
+      isMotionCmd = true;
+    } else if (cmdStr == "ROT_R") {
+      base_motion.move_type = DriveCommand::CMD_ROT_R;
+      isMotionCmd = true;
+    } else if (cmdStr == "STOP") {
+      base_motion.move_type = DriveCommand::CMD_STOP;
+      isMotionCmd = true;
+    } else if (cmdStr == "J1_UP") {
+      arm_motion.joint_id = 1;
+      arm_motion.direction = ArmDir::UP;
+      isMotionCmd = true;
+    } else if (cmdStr == "J1_DOWN") {
+      arm_motion.joint_id = 1;
+      arm_motion.direction = ArmDir::DOWN;
+      isMotionCmd = true;
+    } else if (cmdStr == "J2_UP") {
+      arm_motion.joint_id = 2;
+      arm_motion.direction = ArmDir::UP;
+      isMotionCmd = true;
+    } else if (cmdStr == "J2_DOWN") {
+      arm_motion.joint_id = 2;
+      arm_motion.direction = ArmDir::DOWN;
+      isMotionCmd = true;
+    } else if (cmdStr == "J3_UP") {
+      arm_motion.joint_id = 3;
+      arm_motion.direction = ArmDir::UP;
+      isMotionCmd = true;
+    } else if (cmdStr == "J3_DOWN") {
+      arm_motion.joint_id = 3;
+      arm_motion.direction = ArmDir::DOWN;
+      isMotionCmd = true;
+    } else if (cmdStr == "J4_UP") {
+      arm_motion.joint_id = 4;
+      arm_motion.direction = ArmDir::UP;
+      isMotionCmd = true;
+    } else if (cmdStr == "J4_DOWN") {
+      arm_motion.joint_id = 4;
+      arm_motion.direction = ArmDir::DOWN;
+      isMotionCmd = true;
+    } else if (cmdStr == "ARM_STOP") {
+      arm_motion.joint_id = 0;
+      arm_motion.direction = ArmDir::STOP;
+      isMotionCmd = true;
     }
 
     // 2. EMERGENCY MODE OVERRIDES
-    if (local_gui.mode_trigger == GUITrigger::TRIGGER_MANUAL && currentState != RobotState::MANUAL_MODE) {
-        Serial.println("OVERRIDE: Entering Manual Mode.");
-        currentState = RobotState::MANUAL_MODE;
-    } 
-    else if (local_gui.mode_trigger == GUITrigger::TRIGGER_PICK && currentState == RobotState::MANUAL_MODE) {
-        currentState = RobotState::START_PICK_SEQUENCE;
+    if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
+        currentState != RobotState::MANUAL_MODE) {
+      Serial.println("OVERRIDE: Entering Manual Mode.");
+      currentState = RobotState::MANUAL_MODE;
+    } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
+               currentState == RobotState::MANUAL_MODE) {
+      currentState = RobotState::START_PICK_SEQUENCE;
+    } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
+               currentState == RobotState::MANUAL_MODE) {
+      currentState = RobotState::START_AUTO_DROP_SEQUENCE;
     }
-    else if (local_gui.mode_trigger == GUITrigger::TRIGGER_AUTO && currentState == RobotState::MANUAL_MODE) {
-        currentState = RobotState::START_AUTO_DROP_SEQUENCE;
+
+    if (currentState == RobotState::MANUAL_MODE && isMotionCmd) {
+      xQueueOverwrite(pidMailbox, &base_motion);
+      xQueueOverwrite(armMailbox, &arm_motion);
     }
+  }
 
-    // 3. THE AUTONOMOUS ROUTER
-    switch (currentState) {
-        case RobotState::MANUAL_MODE: {
-            xQueueOverwrite(pidMailbox, &local_gui.base_motion);
-            xQueueOverwrite(armMailbox, &local_gui.arm_motion);
-            break;
-        }
+  // 3. THE AUTONOMOUS ROUTER
+  switch (currentState) {
+  case RobotState::MANUAL_MODE: {
+    break;
+  }
 
+  case RobotState::START_PICK_SEQUENCE:
+    Serial.println("SKELETON: Triggering QR Scan...");
+    // CAM_UART.println("SCAN_QR");
+    stateTimer = millis();
+    currentState = RobotState::WAIT_FOR_VISION_QR;
+    break;
 
-        case RobotState::START_PICK_SEQUENCE:
-            Serial.println("SKELETON: Triggering QR Scan...");
-            // CAM_UART.println("SCAN_QR");
-            stateTimer = millis();
-            currentState = RobotState::WAIT_FOR_VISION_QR;
-            break;
+  case RobotState::WAIT_FOR_VISION_QR:
 
-        case RobotState::WAIT_FOR_VISION_QR:
+    break;
 
-            break;
+  case RobotState::WAIT_FOR_ARM_PICK:
 
-        case RobotState::WAIT_FOR_ARM_PICK:
+    break;
 
-            break;
+  case RobotState::START_AUTO_DROP_SEQUENCE:
+    Serial.println("SKELETON: Navigating to Drop Zone...");
+    // Path Planner Integration Goes Here
+    currentState = RobotState::NAVIGATING_TO_DROP;
+    break;
 
-        case RobotState::START_AUTO_DROP_SEQUENCE:
-            Serial.println("SKELETON: Navigating to Drop Zone...");
-            // Path Planner Integration Goes Here
-            currentState = RobotState::NAVIGATING_TO_DROP;
-            break;
-            
-        case RobotState::NAVIGATING_TO_DROP:
-        case RobotState::WAIT_FOR_VISION_COLOR:
-        case RobotState::WAIT_FOR_ARM_DROP:
-            // SKELETON: Implement Look-Move-Look and Drop logic later
-            break;
-    }
+  case RobotState::NAVIGATING_TO_DROP:
+  case RobotState::WAIT_FOR_VISION_COLOR:
+  case RobotState::WAIT_FOR_ARM_DROP:
+    // SKELETON: Implement Look-Move-Look and Drop logic later
+    break;
+  }
 }
