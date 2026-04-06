@@ -67,7 +67,7 @@ void MasterStateMachine::update() {
     } else if (cmdStr == "MODE_AUTO") {
       mode_trigger = GUITrigger::TRIGGER_AUTO;
       currentModeStr = "AUTONOMOUS";
-    } else if (cmdStr == "PICK_MODE") {
+    } else if (cmdStr == "MODE_PICK") {
       mode_trigger = GUITrigger::TRIGGER_PICK;
       currentModeStr = "PICK";
     } else if (cmdStr == "FWD") {
@@ -143,10 +143,10 @@ void MasterStateMachine::update() {
       arm_motion.joint_id = 5;
       arm_motion.direction = ArmDir::DOWN; // Mapped to 1 in UART_Master
       isArmCmd = true;
-    /* } else if (cmdStr == "GRIP_PICK") {
+    } else if (cmdStr == "GRIP_PICK") {
       arm_motion.joint_id = 5;
       arm_motion.direction = ArmDir::STOP; // I mapped the STOP enum purely as a placeholder integer to trigger PICK!
-      isArmCmd = true; */
+      isArmCmd = true;
     } else if (cmdStr == "ARM_STOP") {
     arm_motion.joint_id = 0;
     arm_motion.direction = ArmDir::STOP;
