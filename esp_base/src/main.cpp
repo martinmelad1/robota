@@ -1,5 +1,6 @@
 #include "StateMachine.h"
 #include "WorldState.h"
+#include "UART_Master.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
@@ -15,9 +16,6 @@ MasterStateMachine robotBrain;
 QueueHandle_t guiMailbox;  // Now holds StringMessage
 QueueHandle_t pidMailbox;
 QueueHandle_t armMailbox;
-
-HardwareSerial CAM_UART(1);
-HardwareSerial ARM_UART(2);
 
 TaskHandle_t BrainTask;
 TaskHandle_t WebBroadcastTask;
@@ -74,15 +72,18 @@ void setupTasks() {
         }
       },
       "WebBroadcastTask", 4096, NULL, 1, &WebBroadcastTask, 0);
+
+  // Start UART Master Tasks
+  xTaskCreatePinnedToCore(UART_Cam_Task, "UART_Cam", 4096, NULL, 1, NULL, 1);
+  xTaskCreatePinnedToCore(UART_Arm_Task, "UART_Arm", 4096, NULL, 1, NULL, 1);
 }
 
 // ── SETUP ─────────────────────────────────────────────────────
 void setup() {
   Serial.begin(115200);
 
-  // You will need to define proper RX/TX pins for UARTs based on your hardware
-  // connections CAM_UART.begin(115200, SERIAL_8N1, RX_PIN1, TX_PIN1);
-  // ARM_UART.begin(115200, SERIAL_8N1, RX_PIN2, TX_PIN2);
+  // Initialize ESP-IDF UART interfaces
+  UART_Master_Init();
 
   guiMailbox = xQueueCreate(1, sizeof(StringMessage));
   pidMailbox = xQueueCreate(1, sizeof(ChassisMotion));
@@ -114,5 +115,9 @@ void loop() {
   // FreeRTOS tasks handle the routing.
   // We just clean up WebSockets clients .
   ws.cleanupClients();
-  delay(100);
+
+  // Simple serial testing interface for hardware testing
+  UART_Master_ProcessSerial();
+
+  delay(50);
 }

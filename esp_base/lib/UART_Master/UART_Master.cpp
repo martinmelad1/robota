@@ -1,11 +1,17 @@
 #include "UART_Master.h"
 
+#include <Arduino.h>
 #include <stdio.h>
 #include <string.h>
 
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/queue.h"
+
+#include "WorldState.h"
+
+extern QueueHandle_t armMailbox;
 
 // ========================
 // UART CONFIG
@@ -16,11 +22,11 @@
 #define BUF_SIZE 1024
 
 // Pins
-#define CAM_TX 17
-#define CAM_RX 16
+#define CAM_TX 25   //17 
+#define CAM_RX 26   //16
 
-#define ARM_TX 25
-#define ARM_RX 26
+#define ARM_TX 14   //25
+#define ARM_RX 15   //26
 
 // ========================
 // INIT
@@ -47,6 +53,31 @@ void UART_Master_Init(void)
 }
 
 // ========================
+// SERIAL TESTING
+// ========================
+void UART_Master_ProcessSerial(void)
+{
+    // Simple serial testing interface for hardware testing
+    if (Serial.available()) {
+        String cmd = Serial.readStringUntil('\n');
+        cmd.trim();
+        if (cmd == "test_move") {
+            ARM_MoveXYZ(10.5, 20.0, 30.5);
+            Serial.println("Sent test_move to ARM");
+        } else if (cmd == "test_grip_close") {
+            ARM_Grip(1);
+            Serial.println("Sent test_grip_close to ARM");
+        } else if (cmd == "test_grip_open") {
+            ARM_Grip(0);
+            Serial.println("Sent test_grip_open to ARM");
+        } else if (cmd == "test_qr") {
+            CAM_RequestQR();
+            Serial.println("Sent test_qr to CAM");
+        }
+    }
+}
+
+// ========================
 // CAMERA FUNCTIONS
 // ========================
 void CAM_RequestQR(void)
@@ -62,24 +93,38 @@ void CAM_RequestQR(void)
 void ARM_MoveXYZ(float x, float y, float z)
 {
     char cmd[64];
-    sprintf(cmd, "MOVE %.2f %.2f %.2f\n", x, y, z);
+    sprintf(cmd, "MOVE:%.2f,%.2f,%.2f\n", x, y, z);
 
     uart_write_bytes(UART_ARM, cmd, strlen(cmd));
     printf("Sent to ARM: %s", cmd);
 }
 
-void ARM_Grip(int close)
+void ARM_Grip(int grip_cmd)
 {
-    if (close)
+    if (grip_cmd == 1)
     {
-        uart_write_bytes(UART_ARM, "GRIP_CLOSE\n", 11);
-        printf("Sent to ARM: GRIP_CLOSE\n");
+        uart_write_bytes(UART_ARM, "GRIP:CLOSE\n", 11);
+        printf("Sent to ARM: GRIP:CLOSE\n");
+    }
+    else if (grip_cmd == 2)
+    {
+        uart_write_bytes(UART_ARM, "GRIP:PICK\n", 10);
+        printf("Sent to ARM: GRIP:PICK\n");
     }
     else
     {
-        uart_write_bytes(UART_ARM, "GRIP_OPEN\n", 10);
-        printf("Sent to ARM: GRIP_OPEN\n");
+        uart_write_bytes(UART_ARM, "GRIP:OPEN\n", 10);
+        printf("Sent to ARM: GRIP:OPEN\n");
     }
+}
+
+void ARM_MoveJoint(int joint_id, int dir)
+{
+    char cmd[64];
+    sprintf(cmd, "JOINT:%d,%d\n", joint_id, dir);
+
+    uart_write_bytes(UART_ARM, cmd, strlen(cmd));
+    printf("Sent to ARM: %s", cmd);
 }
 
 // ========================
@@ -116,6 +161,24 @@ void UART_Arm_Task(void *arg)
 
     while (1)
     {
+        // 1. Process Mailbox from State Machine
+        ArmMotion motion_cmd;
+        if (xQueueReceive(armMailbox, &motion_cmd, 0) == pdTRUE) {
+            // Forward it to ARM via UART
+            if (motion_cmd.joint_id == 5) {
+                if (motion_cmd.direction == ArmDir::UP) {
+                    ARM_Grip(0); // Open
+                } else if (motion_cmd.direction == ArmDir::DOWN) {
+                    ARM_Grip(1); // Close
+                } else if (motion_cmd.direction == ArmDir::STOP) {
+                    ARM_Grip(2); // Pick
+                }
+            } else {
+                ARM_MoveJoint(motion_cmd.joint_id, (int)motion_cmd.direction);
+            }
+        }
+
+        // 2. Read incoming data from ARM
         int len = uart_read_bytes(UART_ARM, data, BUF_SIZE - 1, 20 / portTICK_PERIOD_MS);
 
         if (len > 0)

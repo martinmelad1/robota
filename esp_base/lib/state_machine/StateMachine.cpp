@@ -47,12 +47,16 @@ void MasterStateMachine::update() {
     arm_motion.joint_id = 0;
     arm_motion.direction = ArmDir::STOP;
 
-    bool isMotionCmd = false;
+    bool isChassisCmd = false;
+    bool isArmCmd = false;
 
     if (cmdStr == "ESTOP") {
       base_motion.move_type = DriveCommand::CMD_STOP;
+      arm_motion.joint_id = 0;
+      arm_motion.direction = ArmDir::STOP;
       lastCommand = "EMERGENCY STOP";
-      isMotionCmd = true;
+      isChassisCmd = true;
+      isArmCmd = true;
 
       // ESTOP also acts as the Manual button
       mode_trigger = GUITrigger::TRIGGER_MANUAL;
@@ -68,125 +72,141 @@ void MasterStateMachine::update() {
       currentModeStr = "PICK";
     } else if (cmdStr == "FWD") {
       base_motion.move_type = DriveCommand::CMD_FWD;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "BWD") {
       base_motion.move_type = DriveCommand::CMD_BWD;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "LEFT") {
       base_motion.move_type = DriveCommand::CMD_LEFT;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "RIGHT") {
       base_motion.move_type = DriveCommand::CMD_RIGHT;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "FWD_LEFT") {
       base_motion.move_type = DriveCommand::CMD_FWD_L;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "FWD_RIGHT") {
       base_motion.move_type = DriveCommand::CMD_FWD_R;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "BWD_LEFT") {
       base_motion.move_type = DriveCommand::CMD_BWD_L;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "BWD_RIGHT") {
       base_motion.move_type = DriveCommand::CMD_BWD_R;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "ROT_L") {
       base_motion.move_type = DriveCommand::CMD_ROT_L;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "ROT_R") {
       base_motion.move_type = DriveCommand::CMD_ROT_R;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "STOP") {
       base_motion.move_type = DriveCommand::CMD_STOP;
-      isMotionCmd = true;
+      isChassisCmd = true;
     } else if (cmdStr == "J1_UP") {
       arm_motion.joint_id = 1;
       arm_motion.direction = ArmDir::UP;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J1_DOWN") {
       arm_motion.joint_id = 1;
       arm_motion.direction = ArmDir::DOWN;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J2_UP") {
       arm_motion.joint_id = 2;
       arm_motion.direction = ArmDir::UP;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J2_DOWN") {
       arm_motion.joint_id = 2;
       arm_motion.direction = ArmDir::DOWN;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J3_UP") {
       arm_motion.joint_id = 3;
       arm_motion.direction = ArmDir::UP;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J3_DOWN") {
       arm_motion.joint_id = 3;
       arm_motion.direction = ArmDir::DOWN;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J4_UP") {
       arm_motion.joint_id = 4;
       arm_motion.direction = ArmDir::UP;
-      isMotionCmd = true;
+      isArmCmd = true;
     } else if (cmdStr == "J4_DOWN") {
       arm_motion.joint_id = 4;
       arm_motion.direction = ArmDir::DOWN;
-      isMotionCmd = true;
+      isArmCmd = true;
+    } else if (cmdStr == "GRIP_OPEN") {
+      arm_motion.joint_id = 5;
+      arm_motion.direction = ArmDir::UP; // Mapped to 0 in UART_Master
+      isArmCmd = true;
+    } else if (cmdStr == "GRIP_CLOSE") {
+      arm_motion.joint_id = 5;
+      arm_motion.direction = ArmDir::DOWN; // Mapped to 1 in UART_Master
+      isArmCmd = true;
+    /* } else if (cmdStr == "GRIP_PICK") {
+      arm_motion.joint_id = 5;
+      arm_motion.direction = ArmDir::STOP; // I mapped the STOP enum purely as a placeholder integer to trigger PICK!
+      isArmCmd = true; */
     } else if (cmdStr == "ARM_STOP") {
-      arm_motion.joint_id = 0;
-      arm_motion.direction = ArmDir::STOP;
-      isMotionCmd = true;
-    }
+    arm_motion.joint_id = 0;
+    arm_motion.direction = ArmDir::STOP;
+    isArmCmd = true;
+  }
 
-    // 2. EMERGENCY MODE OVERRIDES
-    if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
-        currentState != RobotState::MANUAL_MODE) {
-      Serial.println("OVERRIDE: Entering Manual Mode.");
-      currentState = RobotState::MANUAL_MODE;
-    } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
-               currentState == RobotState::MANUAL_MODE) {
-      currentState = RobotState::START_PICK_SEQUENCE;
-    } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
-               currentState == RobotState::MANUAL_MODE) {
-      currentState = RobotState::START_AUTO_DROP_SEQUENCE;
-    }
+  // 2. EMERGENCY MODE OVERRIDES
+  if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
+      currentState != RobotState::MANUAL_MODE) {
+    Serial.println("OVERRIDE: Entering Manual Mode.");
+    currentState = RobotState::MANUAL_MODE;
+  } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
+             currentState == RobotState::MANUAL_MODE) {
+    currentState = RobotState::START_PICK_SEQUENCE;
+  } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
+             currentState == RobotState::MANUAL_MODE) {
+    currentState = RobotState::START_AUTO_DROP_SEQUENCE;
+  }
 
-    if (currentState == RobotState::MANUAL_MODE && isMotionCmd) {
+  if (currentState == RobotState::MANUAL_MODE) {
+    if (isChassisCmd) {
       xQueueOverwrite(pidMailbox, &base_motion);
+    }
+    if (isArmCmd) {
       xQueueOverwrite(armMailbox, &arm_motion);
     }
   }
+}
 
-  // 3. THE AUTONOMOUS ROUTER
-  switch (currentState) {
-  case RobotState::MANUAL_MODE: {
-    break;
-  }
+// 3. THE AUTONOMOUS ROUTER
+switch (currentState) {
+case RobotState::MANUAL_MODE: {
+  break;
+}
 
-  case RobotState::START_PICK_SEQUENCE:
-    Serial.println("SKELETON: Triggering QR Scan...");
-    // CAM_UART.println("SCAN_QR");
-    stateTimer = millis();
-    currentState = RobotState::WAIT_FOR_VISION_QR;
-    break;
+case RobotState::START_PICK_SEQUENCE:
+  Serial.println("SKELETON: Triggering QR Scan...");
+  // CAM_UART.println("SCAN_QR");
+  stateTimer = millis();
+  currentState = RobotState::WAIT_FOR_VISION_QR;
+  break;
 
-  case RobotState::WAIT_FOR_VISION_QR:
+case RobotState::WAIT_FOR_VISION_QR:
 
-    break;
+  break;
 
-  case RobotState::WAIT_FOR_ARM_PICK:
+case RobotState::WAIT_FOR_ARM_PICK:
 
-    break;
+  break;
 
-  case RobotState::START_AUTO_DROP_SEQUENCE:
-    Serial.println("SKELETON: Navigating to Drop Zone...");
-    // Path Planner Integration Goes Here
-    currentState = RobotState::NAVIGATING_TO_DROP;
-    break;
+case RobotState::START_AUTO_DROP_SEQUENCE:
+  Serial.println("SKELETON: Navigating to Drop Zone...");
+  // Path Planner Integration Goes Here
+  currentState = RobotState::NAVIGATING_TO_DROP;
+  break;
 
-  case RobotState::NAVIGATING_TO_DROP:
-  case RobotState::WAIT_FOR_VISION_COLOR:
-  case RobotState::WAIT_FOR_ARM_DROP:
-    // SKELETON: Implement Look-Move-Look and Drop logic later
-    break;
-  }
+case RobotState::NAVIGATING_TO_DROP:
+case RobotState::WAIT_FOR_VISION_COLOR:
+case RobotState::WAIT_FOR_ARM_DROP:
+  // SKELETON: Implement Look-Move-Look and Drop logic later
+  break;
+}
 }

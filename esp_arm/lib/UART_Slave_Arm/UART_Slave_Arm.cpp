@@ -1,14 +1,19 @@
 #include "UART_Slave_Arm.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "Servo_Control.h"
 
 #define UART_PORT UART_NUM_1
 #define TXD 17
 #define RXD 16
 #define BUF_SIZE 1024
+
+String latest_arm_cmd = "";
+volatile bool new_arm_cmd = false;
 
 void UART_Arm_Init() {
     uart_config_t config = {
@@ -31,17 +36,72 @@ void sendResponse(const char *msg) {
 
 void processArmCommand(char *cmd) {
 
+    printf("\n>>> BASE ESP -> ARM ESP RECEIVED: '%s' <<<\n", cmd);
+
+    // Pass it to the main loop
+    latest_arm_cmd = String(cmd);
+    new_arm_cmd = true;
+
     if (strncmp(cmd, "MOVE:", 5) == 0) {
-        float x, y, z;
-        sscanf(cmd + 5, "%f,%f,%f", &x, &y, &z);
+        char *ptr = cmd + 5;
+        float x = strtof(ptr, &ptr);
+        if (*ptr == ',') ptr++;
+        float y = strtof(ptr, &ptr);
+        if (*ptr == ',') ptr++;
+        float z = strtof(ptr, NULL);
 
         printf("Move to %.2f %.2f %.2f\n", x, y, z);
         sendResponse("OK");
     }
 
     else if (strncmp(cmd, "GRIP:", 5) == 0) {
-        printf("Grip command\n");
+        ServoCommand sc;
+        sc.joint_id = 5;
+        
+        if (strncmp(cmd + 5, "OPEN", 4) == 0) {
+            sc.direction = 1;
+        } else if (strncmp(cmd + 5, "CLOSE", 5) == 0) {
+            sc.direction = -1;
+        } else if (strncmp(cmd + 5, "PICK", 4) == 0) {
+            sc.direction = 2;
+        } else {
+            sendResponse("ERROR");
+            return;
+        }
+
+        if (servoMailbox != NULL) {
+            xQueueSend(servoMailbox, &sc, 0);
+        }
+        printf("Grip command: %s\n", cmd + 5);
         sendResponse("OK");
+    }
+
+    else if (strncmp(cmd, "JOINT:", 6) == 0) {
+        char *ptr = cmd + 6;
+        int joint_id = strtol(ptr, &ptr, 10);
+        int direction = 0;
+        bool valid = false;
+        
+        if (*ptr == ',') {
+            ptr++;
+            direction = strtol(ptr, NULL, 10);
+            valid = true;
+        }
+
+        if (valid) {
+            ServoCommand sc;
+            sc.joint_id = joint_id;
+            sc.direction = direction;
+            
+            printf("Joint command - ID: %d, Dir: %d\n", joint_id, direction);
+
+            if (servoMailbox != NULL) {
+                xQueueSend(servoMailbox, &sc, 0);
+            }
+            sendResponse("OK");
+        } else {
+            sendResponse("ERROR");
+        }
     }
 
     else {
