@@ -6,83 +6,65 @@
 <title>Robot Dashboard</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: monospace;
-    background: #0f1117;
-    color: #e2e8f0;
-    padding: 20px;
-  }
+  body { font-family: monospace; background: #0f1117; color: #e2e8f0; padding: 20px; }
   h1 { font-size: 20px; color: #a78bfa; margin-bottom: 4px; }
   .subtitle { font-size: 12px; color: #7c83a0; margin-bottom: 20px; }
 
   .conn-bar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    font-size: 13px;
-    color: #7c83a0;
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 16px; font-size: 13px; color: #7c83a0;
   }
   .dot { width: 10px; height: 10px; border-radius: 50%; background: #ef4444; }
   .dot.on { background: #34d399; }
 
   .command-box {
-    background: #1e2130;
-    border: 2px solid #2d3150;
-    border-radius: 14px;
-    padding: 20px;
-    margin-bottom: 16px;
-    text-align: center;
+    background: #1e2130; border: 2px solid #2d3150;
+    border-radius: 14px; padding: 20px;
+    margin-bottom: 16px; text-align: center;
   }
   .command-label {
-    font-size: 11px;
-    color: #7c83a0;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 10px;
+    font-size: 11px; color: #7c83a0;
+    text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;
   }
   .command-value {
-    font-size: 32px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    min-height: 42px;
-    transition: color 0.2s;
+    font-size: 32px; font-weight: bold;
+    letter-spacing: 2px; min-height: 42px; transition: color 0.2s;
   }
   .command-value.moving  { color: #34d399; }
   .command-value.stopped { color: #7c83a0; }
   .command-value.estop   { color: #ef4444; }
   .command-value.arm     { color: #60a5fa; }
-  .command-value.auto    { color: #a78bfa; }
+  .command-value.picking { color: #a78bfa; }
 
   .mode-pill {
-    display: inline-block;
-    padding: 4px 14px;
-    border-radius: 20px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    margin-top: 10px;
+    display: inline-block; padding: 4px 14px;
+    border-radius: 20px; font-size: 11px;
+    font-weight: 700; letter-spacing: 1px; margin-top: 10px;
   }
   .pill-manual { background: #1a3a6a; color: #60a5fa; }
   .pill-auto   { background: #1a4a2a; color: #34d399; }
+  .pill-pick   { background: #2e1a5e; color: #a78bfa; }
+
+  /* Pick progress bar — only visible during auto pick */
+  .pick-progress {
+    margin-top: 12px; display: none;
+  }
+  .pick-progress.visible { display: block; }
+  .pick-label { font-size: 10px; color: #a78bfa; margin-bottom: 4px; letter-spacing: 1px; }
+  .pick-bar-wrap { background: #161825; border-radius: 4px; height: 8px; }
+  .pick-bar { height: 100%; background: #a78bfa; border-radius: 4px; width: 0%; transition: width 0.3s; }
+  .pick-step-label { font-size: 10px; color: #7c83a0; margin-top: 4px; }
 
   .arrow-box {
-    background: #1e2130;
-    border: 1px solid #2d3150;
-    border-radius: 14px;
-    padding: 16px;
+    background: #1e2130; border: 1px solid #2d3150;
+    border-radius: 14px; padding: 16px;
     margin-bottom: 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    display: flex; flex-direction: column; align-items: center;
   }
   .arrow-label {
-    font-size: 11px;
-    color: #7c83a0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 12px;
-    align-self: flex-start;
+    font-size: 11px; color: #7c83a0;
+    text-transform: uppercase; letter-spacing: 1px;
+    margin-bottom: 12px; align-self: flex-start;
   }
   .arrow-grid {
     display: grid;
@@ -91,90 +73,64 @@
     gap: 4px;
   }
   .acell {
-    background: #161825;
-    border: 1px solid #252840;
+    background: #161825; border: 1px solid #252840;
     border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    color: #3d4170;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; color: #3d4170;
     transition: background 0.15s, color 0.15s;
   }
-  .acell.active {
-    background: #1a3a1a;
-    border-color: #34d399;
-    color: #34d399;
-  }
+  .acell.active { background: #1a3a1a; border-color: #34d399; color: #34d399; }
   .acell.center { font-size: 11px; color: #3d4170; }
   .acell.center.active { background: #450a0a; border-color: #ef4444; color: #ef4444; }
 
   .card {
-    background: #1e2130;
-    border: 1px solid #2d3150;
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 12px;
+    background: #1e2130; border: 1px solid #2d3150;
+    border-radius: 10px; padding: 14px; margin-bottom: 12px;
   }
   .card h2 {
-    font-size: 10px;
-    color: #7c83a0;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    margin-bottom: 10px;
+    font-size: 10px; color: #7c83a0;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;
   }
-  .val  { font-size: 24px; font-weight: bold; color: #a78bfa; }
-  .unit { font-size: 11px; color: #7c83a0; margin-left: 3px; }
 
-  .pos-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 10px;
-  }
+  .pos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
   .pos-item { text-align: center; }
   .pos-lbl  { font-size: 10px; color: #7c83a0; margin-bottom: 4px; }
   .pos-val  { font-size: 22px; font-weight: bold; color: #a78bfa; }
   .pos-unit { font-size: 10px; color: #7c83a0; }
 
   .wheel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .wheel-box  {
-    background: #252840;
-    border-radius: 6px;
-    padding: 8px;
-    text-align: center;
-  }
-  .wheel-lbl { font-size: 10px; color: #7c83a0; margin-bottom: 2px; }
-  .wheel-val { font-size: 18px; color: #34d399; font-weight: bold; }
-  .bar-wrap  { background: #161825; border-radius: 3px; height: 5px; margin-top: 4px; }
-  .bar       { height: 100%; background: #34d399; border-radius: 3px; transition: width 0.1s; width: 0%; }
+  .wheel-box  { background: #252840; border-radius: 6px; padding: 8px; text-align: center; }
+  .wheel-lbl  { font-size: 10px; color: #7c83a0; margin-bottom: 2px; }
+  .wheel-val  { font-size: 18px; color: #34d399; font-weight: bold; }
+  .bar-wrap   { background: #161825; border-radius: 3px; height: 5px; margin-top: 4px; }
+  .bar        { height: 100%; background: #34d399; border-radius: 3px; transition: width 0.1s; width: 0%; }
 
-  .joint-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .jlbl      { font-size: 11px; color: #7c83a0; width: 24px; }
-  .jbar-wrap { flex: 1; background: #161825; border-radius: 3px; height: 8px; }
-  .jbar      { height: 100%; background: #60a5fa; border-radius: 3px; transition: width 0.2s; }
-  .jval      { font-size: 12px; color: #60a5fa; width: 52px; text-align: right; }
+  .joint-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .jlbl       { font-size: 11px; color: #7c83a0; width: 24px; }
+  .jbar-wrap  { flex: 1; background: #161825; border-radius: 3px; height: 8px; }
+  .jbar       { height: 100%; background: #60a5fa; border-radius: 3px; transition: width 0.2s; }
+  .jval       { font-size: 12px; color: #60a5fa; width: 52px; text-align: right; }
 
-  .grip-status {
-    font-size: 20px;
-    font-weight: bold;
-    text-align: center;
-    padding: 10px;
-    border-radius: 8px;
-    margin-top: 6px;
+  /* Gripper 3-state display */
+  .grip-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px; margin-top: 6px;
   }
-  .grip-open  { background: #0f2a1a; color: #34d399; }
-  .grip-close { background: #1a0f2e; color: #a78bfa; }
+  .grip-indicator {
+    padding: 10px 4px; border-radius: 8px; text-align: center;
+    font-size: 11px; font-weight: 700; border: 2px solid;
+    transition: all 0.2s;
+  }
+  .grip-indicator.active-open  { background: #0f1a2e; border-color: #60a5fa; color: #60a5fa; }
+  .grip-indicator.active-close { background: #1a0f2e; border-color: #a78bfa; color: #a78bfa; }
+  .grip-indicator.active-pick  { background: #0f2a1a; border-color: #34d399; color: #34d399; }
+  .grip-indicator.inactive     { background: #161825; border-color: #252840; color: #3d4170; }
 </style>
 </head>
 <body>
 
 <h1>Robot Dashboard</h1>
-<p class="subtitle">Live sensor data — updates 10x per second</p>
+<p class="subtitle">Live sensor data — updates 20x per second</p>
 
 <div class="conn-bar">
   <div class="dot" id="dot"></div>
@@ -186,6 +142,13 @@
   <div class="command-label">Current command</div>
   <div class="command-value stopped" id="cmd-display">IDLE</div>
   <div id="mode-pill" class="mode-pill pill-manual">MANUAL MODE</div>
+
+  <!-- Pick progress — shown only during GRIP_PICK sequence -->
+  <div class="pick-progress" id="pick-progress">
+    <div class="pick-label">AUTO PICK IN PROGRESS</div>
+    <div class="pick-bar-wrap"><div class="pick-bar" id="pick-bar"></div></div>
+    <div class="pick-step-label" id="pick-step">Lowering arm...</div>
+  </div>
 </div>
 
 <!-- Direction indicator -->
@@ -255,104 +218,134 @@
 
 <!-- Arm joints -->
 <div class="card">
-  <h2>Arm joints (J1 - J4)</h2>
+  <h2>Arm joints (J1 – J4)</h2>
   <div class="joint-row">
     <span class="jlbl">J1</span>
     <div class="jbar-wrap"><div class="jbar" id="j1-bar" style="width:50%"></div></div>
-    <span class="jval" id="j1">0.0 deg</span>
+    <span class="jval" id="j1">90 deg</span>
   </div>
   <div class="joint-row">
     <span class="jlbl">J2</span>
     <div class="jbar-wrap"><div class="jbar" id="j2-bar" style="width:50%"></div></div>
-    <span class="jval" id="j2">0.0 deg</span>
+    <span class="jval" id="j2">90 deg</span>
   </div>
   <div class="joint-row">
     <span class="jlbl">J3</span>
     <div class="jbar-wrap"><div class="jbar" id="j3-bar" style="width:50%"></div></div>
-    <span class="jval" id="j3">0.0 deg</span>
+    <span class="jval" id="j3">90 deg</span>
   </div>
   <div class="joint-row">
     <span class="jlbl">J4</span>
     <div class="jbar-wrap"><div class="jbar" id="j4-bar" style="width:50%"></div></div>
-    <span class="jval" id="j4">0.0 deg</span>
+    <span class="jval" id="j4">90 deg</span>
   </div>
 </div>
 
 <!-- Gripper -->
 <div class="card">
   <h2>Gripper / J5</h2>
-  <div class="grip-status grip-open" id="grip-status">OPEN</div>
+  <div class="grip-row">
+    <div class="grip-indicator inactive" id="gi-open">&#x1F91C; Open</div>
+    <div class="grip-indicator inactive" id="gi-close">&#x270A; Close</div>
+    <div class="grip-indicator inactive" id="gi-pick">&#x1F4E6; Picking</div>
+  </div>
 </div>
 
 <script>
   const ESP32_IP = "192.168.4.1";
-
   const dot      = document.getElementById("dot");
   const connText = document.getElementById("conn-text");
   let ws;
 
   function connect() {
     ws = new WebSocket("ws://" + ESP32_IP + "/ws");
-    ws.onopen  = () => {
-      dot.classList.add("on");
-      connText.textContent = "Connected to ESP32 (192.168.4.1)";
-    };
-    ws.onclose = () => {
-      dot.classList.remove("on");
-      connText.textContent = "Disconnected — retrying...";
-      setTimeout(connect, 2000);
-    };
-    ws.onmessage = (event) => {
-      const d = JSON.parse(event.data);
-      updateDashboard(d);
-    };
+    ws.onopen  = () => { dot.classList.add("on"); connText.textContent = "Connected to ESP32 (192.168.4.1)"; };
+    ws.onclose = () => { dot.classList.remove("on"); connText.textContent = "Disconnected — retrying..."; setTimeout(connect, 2000); };
+    ws.onmessage = e => { try { updateDashboard(JSON.parse(e.data)); } catch(_){} };
   }
-
   connect();
 
   const arrowMap = {
-    "FWD":       "a-FW",
-    "BWD":       "a-BW",
-    "LEFT":      "a-LL",
-    "RIGHT":     "a-RR",
-    "FWD_LEFT":  "a-FL",
-    "FWD_RIGHT": "a-FR",
-    "BWD_LEFT":  "a-BL",
-    "BWD_RIGHT": "a-BR",
-    "STOP":      "a-ST",
-    "IDLE":      "a-ST",
+    "FWD":"a-FW", "BWD":"a-BW", "LEFT":"a-LL", "RIGHT":"a-RR",
+    "FWD_LEFT":"a-FL", "FWD_RIGHT":"a-FR",
+    "BWD_LEFT":"a-BL", "BWD_RIGHT":"a-BR",
+    "STOP":"a-ST", "IDLE":"a-ST",
   };
 
-  function updateDashboard(d) {
+  // Simulated pick progress — since ESP32 doesn't send pick sub-steps,
+  // we animate a progress bar client-side timed to match the sequence:
+  // 30 steps × 20ms = 600ms lower, 300ms grip, 30 steps × 20ms raise = 600ms
+  // Total ~1500ms — we animate the bar over that duration
+  let pickTimer = null;
+  let pickStart = 0;
+  const PICK_DURATION = 1500;
 
-    // Command display
+  const pickStepLabels = [
+    { pct: 0,   label: "Lowering arm..." },
+    { pct: 40,  label: "Closing gripper..." },
+    { pct: 60,  label: "Raising arm..." },
+    { pct: 100, label: "Done!" },
+  ];
+
+  function startPickAnimation() {
+    if (pickTimer) return;
+    pickStart = Date.now();
+    const progressEl = document.getElementById("pick-progress");
+    const barEl      = document.getElementById("pick-bar");
+    const stepEl     = document.getElementById("pick-step");
+    progressEl.classList.add("visible");
+
+    pickTimer = setInterval(() => {
+      const elapsed = Date.now() - pickStart;
+      const pct     = Math.min(100, (elapsed / PICK_DURATION) * 100);
+      barEl.style.width = pct + "%";
+
+      // Find current step label
+      let label = pickStepLabels[0].label;
+      for (const s of pickStepLabels) {
+        if (pct >= s.pct) label = s.label;
+      }
+      stepEl.textContent = label;
+
+      if (pct >= 100) {
+        clearInterval(pickTimer);
+        pickTimer = null;
+        setTimeout(() => progressEl.classList.remove("visible"), 800);
+      }
+    }, 50);
+  }
+
+  function updateDashboard(d) {
+    // ── Command display ──────────────────────────────────────
     const cmdEl = document.getElementById("cmd-display");
     cmdEl.textContent = d.cmd;
     cmdEl.className = "command-value";
-    if (d.cmd === "IDLE" || d.cmd === "STOP") {
+
+    const cmd = d.cmd;
+    if (cmd === "IDLE" || cmd === "STOP" || cmd === "ARM_STOP") {
       cmdEl.classList.add("stopped");
-    } else if (d.cmd === "ESTOP" || d.cmd === "EMERGENCY STOP") {
+    } else if (cmd === "EMERGENCY STOP") {
       cmdEl.classList.add("estop");
-    } else if (d.cmd.startsWith("J") || d.cmd === "ARM_STOP" ||
-               d.cmd === "GRIP_OPEN" || d.cmd === "GRIP_CLOSE") {
+    } else if (cmd === "GRIP_PICK") {
+      cmdEl.classList.add("picking");
+      startPickAnimation();
+    } else if (cmd.startsWith("J") || cmd.startsWith("GRIP")) {
       cmdEl.classList.add("arm");
-    } else if (d.cmd.startsWith("MODE")) {
-      cmdEl.classList.add("auto");
     } else {
       cmdEl.classList.add("moving");
     }
 
-    // Mode pill
+    // ── Mode pill ────────────────────────────────────────────
     const pill = document.getElementById("mode-pill");
     if (d.mode === "AUTONOMOUS") {
-      pill.textContent = "AUTONOMOUS MODE";
-      pill.className   = "mode-pill pill-auto";
+      pill.textContent = "AUTONOMOUS MODE"; pill.className = "mode-pill pill-auto";
+    } else if (d.mode === "AUTO PICK") {
+      pill.textContent = "AUTO PICK MODE";  pill.className = "mode-pill pill-pick";
     } else {
-      pill.textContent = "MANUAL MODE";
-      pill.className   = "mode-pill pill-manual";
+      pill.textContent = "MANUAL MODE";     pill.className = "mode-pill pill-manual";
     }
 
-    // Direction arrows — clear all then light active one
+    // ── Direction arrows ─────────────────────────────────────
     Object.values(arrowMap).forEach(id => {
       const el = document.getElementById(id);
       if (el) el.classList.remove("active");
@@ -363,42 +356,47 @@
       if (el) el.classList.add("active");
     }
 
-    // Position
+    // ── Position ─────────────────────────────────────────────
     document.getElementById("px").textContent  = d.px.toFixed(3);
     document.getElementById("py").textContent  = d.py.toFixed(3);
     document.getElementById("hdg").textContent = d.hdg.toFixed(1);
 
-    // Wheel speeds
-    document.getElementById("fl").textContent     = d.fl.toFixed(2);
-    document.getElementById("fr").textContent     = d.fr.toFixed(2);
-    document.getElementById("rl").textContent     = d.rl.toFixed(2);
-    document.getElementById("rr").textContent     = d.rr.toFixed(2);
-    document.getElementById("fl-bar").style.width = Math.min(Math.abs(d.fl), 100) + "%";
-    document.getElementById("fr-bar").style.width = Math.min(Math.abs(d.fr), 100) + "%";
-    document.getElementById("rl-bar").style.width = Math.min(Math.abs(d.rl), 100) + "%";
-    document.getElementById("rr-bar").style.width = Math.min(Math.abs(d.rr), 100) + "%";
+    // ── Wheel speeds ─────────────────────────────────────────
+    document.getElementById("fl").textContent      = d.fl.toFixed(2);
+    document.getElementById("fr").textContent      = d.fr.toFixed(2);
+    document.getElementById("rl").textContent      = d.rl.toFixed(2);
+    document.getElementById("rr").textContent      = d.rr.toFixed(2);
+    document.getElementById("fl-bar").style.width  = Math.min(Math.abs(d.fl)*100, 100) + "%";
+    document.getElementById("fr-bar").style.width  = Math.min(Math.abs(d.fr)*100, 100) + "%";
+    document.getElementById("rl-bar").style.width  = Math.min(Math.abs(d.rl)*100, 100) + "%";
+    document.getElementById("rr-bar").style.width  = Math.min(Math.abs(d.rr)*100, 100) + "%";
 
-    // Arm joints — map -90 to +90 degrees onto 0-100% bar
-    function angleToBar(a) {
-      return Math.min(100, Math.max(0, (a + 90) / 180 * 100));
-    }
-    document.getElementById("j1").textContent     = d.j1.toFixed(1) + " deg";
-    document.getElementById("j2").textContent     = d.j2.toFixed(1) + " deg";
-    document.getElementById("j3").textContent     = d.j3.toFixed(1) + " deg";
-    document.getElementById("j4").textContent     = d.j4.toFixed(1) + " deg";
-    document.getElementById("j1-bar").style.width = angleToBar(d.j1) + "%";
-    document.getElementById("j2-bar").style.width = angleToBar(d.j2) + "%";
-    document.getElementById("j3-bar").style.width = angleToBar(d.j3) + "%";
-    document.getElementById("j4-bar").style.width = angleToBar(d.j4) + "%";
+    // ── Arm joints ───────────────────────────────────────────
+    function angleToBar(a) { return Math.min(100, Math.max(0, a / 180 * 100)); }
+    document.getElementById("j1").textContent      = d.j1 + " deg";
+    document.getElementById("j2").textContent      = d.j2 + " deg";
+    document.getElementById("j3").textContent      = d.j3 + " deg";
+    document.getElementById("j4").textContent      = d.j4 + " deg";
+    document.getElementById("j1-bar").style.width  = angleToBar(d.j1) + "%";
+    document.getElementById("j2-bar").style.width  = angleToBar(d.j2) + "%";
+    document.getElementById("j3-bar").style.width  = angleToBar(d.j3) + "%";
+    document.getElementById("j4-bar").style.width  = angleToBar(d.j4) + "%";
 
-    // Gripper
-    const gripEl = document.getElementById("grip-status");
-    if (d.grip === 1) {
-      gripEl.textContent = "OPEN";
-      gripEl.className   = "grip-status grip-open";
+    // ── Gripper indicators ───────────────────────────────────
+    const giOpen  = document.getElementById("gi-open");
+    const giClose = document.getElementById("gi-close");
+    const giPick  = document.getElementById("gi-pick");
+
+    giOpen.className  = "grip-indicator inactive";
+    giClose.className = "grip-indicator inactive";
+    giPick.className  = "grip-indicator inactive";
+
+    if (d.cmd === "GRIP_PICK") {
+      giPick.className = "grip-indicator active-pick";
+    } else if (d.grip === 1) {
+      giOpen.className  = "grip-indicator active-open";
     } else {
-      gripEl.textContent = "CLOSED";
-      gripEl.className   = "grip-status grip-close";
+      giClose.className = "grip-indicator active-close";
     }
   }
 </script>

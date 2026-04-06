@@ -14,7 +14,7 @@
 // Physical limits of the Servos (Adjust these if the servo hits a hard stop and jitters!)
 #define SERVO_MIN_ANGLE 0
 #define SERVO_MAX_ANGLE 180
-
+  
 // Gripper Fixed Angles
 #define GRIP_ANGLE_OPEN  60
 #define GRIP_ANGLE_CLOSE 120
