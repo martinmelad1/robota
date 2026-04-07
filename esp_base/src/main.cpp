@@ -1,6 +1,7 @@
 #include "StateMachine.h"
 #include "WorldState.h"
 #include "UART_Master.h"
+#include "PID_Control.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
@@ -76,6 +77,9 @@ void setupTasks() {
   // Start UART Master Tasks
   xTaskCreatePinnedToCore(UART_Cam_Task, "UART_Cam", 4096, NULL, 1, NULL, 1);
   xTaskCreatePinnedToCore(UART_Arm_Task, "UART_Arm", 4096, NULL, 1, NULL, 1);
+
+  // Start PID Task
+  PID_StartTask();
 }
 
 // ── SETUP ─────────────────────────────────────────────────────
@@ -84,6 +88,7 @@ void setup() {
 
   // Initialize ESP-IDF UART interfaces
   UART_Master_Init();
+  PID_Init();
 
   guiMailbox = xQueueCreate(1, sizeof(StringMessage));
   pidMailbox = xQueueCreate(1, sizeof(ChassisMotion));

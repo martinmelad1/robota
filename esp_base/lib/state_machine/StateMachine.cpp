@@ -1,4 +1,5 @@
 #include "StateMachine.h"
+#include "PID_Control.h"
 
 extern QueueHandle_t guiMailbox;
 extern QueueHandle_t pidMailbox;
@@ -17,11 +18,14 @@ void MasterStateMachine::init() {
 }
 
 String MasterStateMachine::getTelemetryJSON() {
+  double fl = 0, fr = 0, rl = 0, rr = 0;
+  PID_GetActualSpeeds(&fl, &fr, &rl, &rr);
+
   String json = "{";
   json += "\"cmd\":\"" + lastCommand + "\",";
   json += "\"mode\":\"" + currentModeStr + "\",";
   json += "\"px\":0.0, \"py\":0.0, \"hdg\":0.0,";
-  json += "\"fl\":0.0, \"fr\":0.0, \"rl\":0.0, \"rr\":0.0,";
+  json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) + ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
   json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0, \"j4\":0.0,";
   json += "\"grip\":1";
   json += "}";
@@ -41,7 +45,7 @@ void MasterStateMachine::update() {
     ChassisMotion base_motion;
     base_motion.move_type = DriveCommand::CMD_STOP;
     base_motion.speed = 0.5;
-    base_motion.omega = 0.0;
+    base_motion.omega = 1.5708;
 
     ArmMotion arm_motion;
     arm_motion.joint_id = 0;

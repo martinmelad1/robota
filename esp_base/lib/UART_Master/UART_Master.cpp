@@ -21,12 +21,12 @@ extern QueueHandle_t armMailbox;
 
 #define BUF_SIZE 1024
 
-// Pins
-#define CAM_TX 25   //17 
-#define CAM_RX 26   //16
+// Pins — MUST NOT conflict with PID motor pins (25,26,14,15,etc.)
+#define CAM_TX 17
+#define CAM_RX 5
 
-#define ARM_TX 14   //25
-#define ARM_RX 15   //26
+#define ARM_TX 23
+#define ARM_RX 35   // GPIO 35 is input-only, perfect for RX
 
 // ========================
 // INIT
