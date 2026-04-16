@@ -43,7 +43,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
     sc.data[sizeof(sc.data) - 1] = '\0';
 
     // Push raw string packet to State Machine's mailbox for translation
-    xQueueSend(guiMailbox, &sc, portMAX_DELAY);
+    if (xQueueSend(guiMailbox, &sc, 0) != pdPASS) {
+        Serial.println("Warning: guiMailbox full! Dropping WS command to prevent server lockup.");
+    }
   }
 }
 
@@ -90,7 +92,7 @@ void setup() {
   UART_Master_Init();
   PID_Init();
 
-  guiMailbox = xQueueCreate(1, sizeof(StringMessage));
+  guiMailbox = xQueueCreate(10, sizeof(StringMessage));
   pidMailbox = xQueueCreate(1, sizeof(ChassisMotion));
   armMailbox = xQueueCreate(1, sizeof(ArmMotion));
 

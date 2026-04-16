@@ -192,11 +192,11 @@ void PID_Compute(float Vx, float Vy, float Wz)
     // STEP 4: TELEPLOT OUTPUT (Tuning Mode)
     // ==========================================
     // Plotting Front-Left motor for tuning
-    Serial.print(">Target:");
-    Serial.println(setFL);
-    Serial.print(">Actual:");
-    Serial.println(inFL);
-    Serial.print(">PWM:"); Serial.println(outFL);
+    // Serial.print(">Target:");
+    // Serial.println(setFL);
+    // Serial.print(">Actual:");
+    // Serial.println(inFL);
+    // Serial.print(">PWM:"); Serial.println(outFL);
   }
 }
 

@@ -10,7 +10,8 @@ enum class RobotState {
     START_AUTO_DROP_SEQUENCE,
     NAVIGATING_TO_DROP,
     WAIT_FOR_VISION_COLOR,
-    WAIT_FOR_ARM_DROP
+    WAIT_FOR_ARM_DROP,
+    WAIT_FOR_ARM_PICK_FINISH
 };
 
 class MasterStateMachine {
@@ -23,6 +24,7 @@ private:
 
     String lastCommand = "IDLE";
     String currentModeStr = "MANUAL";
+    String foundColor = "";
 
 public:
     MasterStateMachine();

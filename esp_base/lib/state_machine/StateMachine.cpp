@@ -1,14 +1,26 @@
 #include "StateMachine.h"
 #include "PID_Control.h"
+#include "UART_Master.h"
 
 extern QueueHandle_t guiMailbox;
 extern QueueHandle_t pidMailbox;
 extern QueueHandle_t armMailbox;
 extern HardwareSerial CAM_UART;
 extern HardwareSerial ARM_UART;
+extern char cam_ip_address[20];
 
-// (Memory Arrays initialized here - skipped for brevity)
+// Memory Arrays
+FieldBox field_boxes[TOTAL_TARGETS] = {{"QR_1", "red", 0.0, 0.0, false},
+                                       {"QR_2", "green", 0.0, 0.0, false},
+                                       {"QR_3", "blue", 0.0, 0.0, false}};
 
+StorageSlot storage_unit[TOTAL_TARGETS] = {{"red", false, 10.0, 0.0, 15.0},
+                                           {"green", false, 20.0, 0.0, 15.0},
+                                           {"blue", false, 30.0, 0.0, 15.0}};
+
+DropoffZone dropoff_zones[TOTAL_TARGETS] = {{"red", 0.0, 0.0, false},
+                                            {"green", 0.0, 0.0, false},
+                                            {"blue", 0.0, 0.0, false}};
 MasterStateMachine::MasterStateMachine() {
   currentState = RobotState::MANUAL_MODE;
 }
@@ -21,11 +33,23 @@ String MasterStateMachine::getTelemetryJSON() {
   double fl = 0, fr = 0, rl = 0, rr = 0;
   PID_GetActualSpeeds(&fl, &fr, &rl, &rr);
 
+  // Determine pick status for dashboard camera feed
+  String pickStatus = "idle";
+  if (currentState == RobotState::START_PICK_SEQUENCE || currentState == RobotState::WAIT_FOR_VISION_QR) {
+    pickStatus = "scanning";
+  } else if (currentState == RobotState::WAIT_FOR_ARM_PICK || currentState == RobotState::WAIT_FOR_ARM_PICK_FINISH) {
+    pickStatus = "found";
+  }
+
   String json = "{";
   json += "\"cmd\":\"" + lastCommand + "\",";
   json += "\"mode\":\"" + currentModeStr + "\",";
+  json += "\"pick_status\":\"" + pickStatus + "\",";
+  json += "\"pick_color\":\"" + foundColor + "\",";
+  json += "\"cam_ip\":\"" + String(cam_ip_address) + "\",";
   json += "\"px\":0.0, \"py\":0.0, \"hdg\":0.0,";
-  json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) + ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
+  json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) +
+          ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
   json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0, \"j4\":0.0,";
   json += "\"grip\":1";
   json += "}";
@@ -36,7 +60,7 @@ void MasterStateMachine::update() {
   StringMessage msg;
 
   // 1. READ FROM GUI
-  if (xQueueReceive(guiMailbox, &msg, 0) == pdTRUE) {
+  while (xQueueReceive(guiMailbox, &msg, 0) == pdTRUE) {
     String cmdStr = String(msg.data);
     lastCommand = cmdStr;
     Serial.println("SM Received CMD: " + cmdStr);
@@ -149,68 +173,151 @@ void MasterStateMachine::update() {
       isArmCmd = true;
     } else if (cmdStr == "GRIP_PICK") {
       arm_motion.joint_id = 5;
-      arm_motion.direction = ArmDir::STOP; // I mapped the STOP enum purely as a placeholder integer to trigger PICK!
+      arm_motion.direction =
+          ArmDir::STOP; // I mapped the STOP enum purely as a placeholder
+                        // integer to trigger PICK!
       isArmCmd = true;
     } else if (cmdStr == "ARM_STOP") {
-    arm_motion.joint_id = 0;
-    arm_motion.direction = ArmDir::STOP;
-    isArmCmd = true;
-  }
+      arm_motion.joint_id = 0;
+      arm_motion.direction = ArmDir::STOP;
+      isArmCmd = true;
+    } else if (cmdStr.startsWith("QR_OK:")) {
+      String color = cmdStr.substring(6);
+      if (currentState == RobotState::WAIT_FOR_VISION_QR) {
+        if (color == "red" || color == "green" || color == "blue") {
+          // Check if this color is already picked/full
+          bool alreadyPicked = false;
+          for (int i = 0; i < TOTAL_TARGETS; i++) {
+              if (storage_unit[i].assignedColor == color && storage_unit[i].isFull) {
+                  alreadyPicked = true;
+                  break;
+              }
+          }
 
-  // 2. EMERGENCY MODE OVERRIDES
-  if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
-      currentState != RobotState::MANUAL_MODE) {
-    Serial.println("OVERRIDE: Entering Manual Mode.");
-    currentState = RobotState::MANUAL_MODE;
-  } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
-             currentState == RobotState::MANUAL_MODE) {
-    currentState = RobotState::START_PICK_SEQUENCE;
-  } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
-             currentState == RobotState::MANUAL_MODE) {
-    currentState = RobotState::START_AUTO_DROP_SEQUENCE;
-  }
-
-  if (currentState == RobotState::MANUAL_MODE) {
-    if (isChassisCmd) {
-      xQueueOverwrite(pidMailbox, &base_motion);
+          if (alreadyPicked) {
+            Serial.println("Vision confirmed color: " + color +
+                           ", but its storage slot is ALREADY FULL! Aborting.");
+            currentState = RobotState::MANUAL_MODE;
+          } else {
+            foundColor = color;
+            Serial.println("Vision confirmed color: " + color +
+                           ". Proceeding to PICK.");
+            currentState = RobotState::WAIT_FOR_ARM_PICK;
+            stateTimer = millis();
+          }
+        } else {
+          Serial.println("Vision found no valid color. Aborting auto-pick.");
+          currentState = RobotState::MANUAL_MODE;
+        }
+      }
     }
-    if (isArmCmd) {
-      xQueueOverwrite(armMailbox, &arm_motion);
+
+    // 2. EMERGENCY MODE OVERRIDES
+    if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
+        currentState != RobotState::MANUAL_MODE) {
+      Serial.println("OVERRIDE: Entering Manual Mode.");
+      currentState = RobotState::MANUAL_MODE;
+    } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
+               currentState == RobotState::MANUAL_MODE) {
+      currentState = RobotState::START_PICK_SEQUENCE;
+    } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
+               currentState == RobotState::MANUAL_MODE) {
+      currentState = RobotState::START_AUTO_DROP_SEQUENCE;
+    }
+
+    if (currentState == RobotState::MANUAL_MODE) {
+      if (isChassisCmd) {
+        xQueueOverwrite(pidMailbox, &base_motion);
+      }
+      if (isArmCmd) {
+        xQueueOverwrite(armMailbox, &arm_motion);
+      }
     }
   }
-}
 
-// 3. THE AUTONOMOUS ROUTER
-switch (currentState) {
-case RobotState::MANUAL_MODE: {
-  break;
-}
+  // 3. THE AUTONOMOUS ROUTER
+  switch (currentState) {
+  case RobotState::MANUAL_MODE: {
+    break;
+  }
 
-case RobotState::START_PICK_SEQUENCE:
-  Serial.println("SKELETON: Triggering QR Scan...");
-  // CAM_UART.println("SCAN_QR");
-  stateTimer = millis();
-  currentState = RobotState::WAIT_FOR_VISION_QR;
-  break;
+  case RobotState::START_PICK_SEQUENCE: {
+    Serial.println("Auto Pick: Stopping Chassis and Requesting QR Scan...");
 
-case RobotState::WAIT_FOR_VISION_QR:
+    // Stop the chassis
+    ChassisMotion stop_motion;
+    stop_motion.move_type = DriveCommand::CMD_STOP;
+    stop_motion.speed = 0;
+    stop_motion.omega = 0;
+    xQueueOverwrite(pidMailbox, &stop_motion);
 
-  break;
+    // Send instruction to CAM
+    CAM_RequestQR();
 
-case RobotState::WAIT_FOR_ARM_PICK:
+    stateTimer = millis();
+    currentState = RobotState::WAIT_FOR_VISION_QR;
+    break;
+  }
 
-  break;
+  case RobotState::WAIT_FOR_VISION_QR:
+    // Waiting for QR_OK:xxx from UART_Cam_Task via guiMailbox
+    if (millis() - stateTimer > 6000) {
+      Serial.println("QR Scan timed out! Returning to Manual.");
+      currentState = RobotState::MANUAL_MODE;
+    }
+    break;
 
-case RobotState::START_AUTO_DROP_SEQUENCE:
-  Serial.println("SKELETON: Navigating to Drop Zone...");
-  // Path Planner Integration Goes Here
-  currentState = RobotState::NAVIGATING_TO_DROP;
-  break;
+  case RobotState::WAIT_FOR_ARM_PICK: {
+    // We execute the ARM PICK motion immediately and transition to a wait state
+    Serial.println("Executing Arm PICK Action...");
+    ArmMotion pick_motion;
+    pick_motion.joint_id = 5;             // Gripper
+    pick_motion.direction = ArmDir::STOP; // Pick command mapping
+    xQueueOverwrite(armMailbox, &pick_motion);
+    
+    // Transition to the actual wait state and reset our timer
+    currentState = RobotState::WAIT_FOR_ARM_PICK_FINISH;
+    stateTimer = millis();
+    break;
+  }
 
-case RobotState::NAVIGATING_TO_DROP:
-case RobotState::WAIT_FOR_VISION_COLOR:
-case RobotState::WAIT_FOR_ARM_DROP:
-  // SKELETON: Implement Look-Move-Look and Drop logic later
-  break;
-}
+  case RobotState::WAIT_FOR_ARM_PICK_FINISH: {
+    // Wait for 6 seconds for the pick action to complete
+    if (millis() - stateTimer > 6000) {
+      // It's been 6 seconds since pick, now move to the placement box based on colour
+      float targetX = 0, targetY = 0, targetZ = 0;
+      for (int i = 0; i < TOTAL_TARGETS; i++) {
+        if (storage_unit[i].assignedColor == foundColor) {
+          targetX = storage_unit[i].slotX;
+          targetY = storage_unit[i].slotY;
+          targetZ = storage_unit[i].slotZ;
+          storage_unit[i].isFull = true;
+          break;
+        }
+      }
+
+      Serial.print("Moving Arm to placement box position based on color ");
+      Serial.print(foundColor);
+      Serial.printf(": X=%.2f Y=%.2f Z=%.2f\n", targetX, targetY, targetZ);
+
+      ARM_MoveXYZ(targetX, targetY, targetZ);
+
+      // Go back to manual after commanding pick & place sequence
+      currentState = RobotState::MANUAL_MODE;
+    }
+    break;
+  }
+
+  case RobotState::START_AUTO_DROP_SEQUENCE:
+    Serial.println("SKELETON: Navigating to Drop Zone...");
+    // Path Planner Integration Goes Here
+    currentState = RobotState::NAVIGATING_TO_DROP;
+    break;
+
+  case RobotState::NAVIGATING_TO_DROP:
+  case RobotState::WAIT_FOR_VISION_COLOR:
+  case RobotState::WAIT_FOR_ARM_DROP:
+    // SKELETON: Implement Look-Move-Look and Drop logic later
+    break;
+  }
 }

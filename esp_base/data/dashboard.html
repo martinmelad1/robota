@@ -143,12 +143,19 @@
   <div class="command-value stopped" id="cmd-display">IDLE</div>
   <div id="mode-pill" class="mode-pill pill-manual">MANUAL MODE</div>
 
-  <!-- Pick progress — shown only during GRIP_PICK sequence -->
+  <!-- Pick progress — shown only during auto pick -->
   <div class="pick-progress" id="pick-progress">
     <div class="pick-label">AUTO PICK IN PROGRESS</div>
     <div class="pick-bar-wrap"><div class="pick-bar" id="pick-bar"></div></div>
     <div class="pick-step-label" id="pick-step">Lowering arm...</div>
   </div>
+</div>
+
+<!-- Camera Feed Panel — visible during QR scanning -->
+<div class="card" id="cam-panel" style="display:none; text-align:center;">
+  <h2>📷 Camera Feed — Scanning for QR Code</h2>
+  <img id="cam-feed" src="" style="width:100%; max-width:480px; border-radius:8px; border:2px solid #2d3150;">
+  <div id="cam-status" style="margin-top:8px; font-size:14px; color:#a78bfa;">Scanning...</div>
 </div>
 
 <!-- Direction indicator -->
@@ -339,10 +346,31 @@
     const pill = document.getElementById("mode-pill");
     if (d.mode === "AUTONOMOUS") {
       pill.textContent = "AUTONOMOUS MODE"; pill.className = "mode-pill pill-auto";
-    } else if (d.mode === "AUTO PICK") {
+    } else if (d.mode === "PICK") {
       pill.textContent = "AUTO PICK MODE";  pill.className = "mode-pill pill-pick";
     } else {
       pill.textContent = "MANUAL MODE";     pill.className = "mode-pill pill-manual";
+    }
+
+    // ── Camera Feed Panel ────────────────────────────────────
+    const camPanel = document.getElementById("cam-panel");
+    const camFeed = document.getElementById("cam-feed");
+    const camStatus = document.getElementById("cam-status");
+
+    if (d.pick_status === "scanning") {
+      camPanel.style.display = "block";
+      // Refresh the image every time telemetry arrives (~10Hz)
+      if (d.cam_ip) {
+        camFeed.src = "http://" + d.cam_ip + "/capture?" + Math.random();
+      }
+      camStatus.textContent = "🔍 Scanning for QR code...";
+      camStatus.style.color = "#a78bfa";
+    } else if (d.pick_status === "found") {
+      camPanel.style.display = "block";
+      camStatus.textContent = "✅ QR Detected: " + (d.pick_color || "???");
+      camStatus.style.color = "#34d399";
+    } else {
+      camPanel.style.display = "none";
     }
 
     // ── Direction arrows ─────────────────────────────────────

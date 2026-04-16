@@ -12,6 +12,7 @@
 #include "WorldState.h"
 
 extern QueueHandle_t armMailbox;
+extern QueueHandle_t guiMailbox;
 
 // ========================
 // UART CONFIG
@@ -127,6 +128,9 @@ void ARM_MoveJoint(int joint_id, int dir)
     printf("Sent to ARM: %s", cmd);
 }
 
+// Global camera IP storage — updated when cam sends CAM_IP:x.x.x.x
+char cam_ip_address[20] = "192.168.4.2"; // Default fallback
+
 // ========================
 // CAMERA TASK
 // ========================
@@ -143,9 +147,37 @@ void UART_Cam_Task(void *arg)
             data[len] = '\0';
             printf("CAM -> BASE: %s\n", data);
 
-            // 🔥 TODO: Parse QR result here
-            // Example:
-            // if (strstr((char*)data, "QR_OK")) { ... }
+            // Parse camera IP address
+            char* ipPtr = strstr((char*)data, "CAM_IP:");
+            if (ipPtr != NULL) {
+                ipPtr += 7; // Skip "CAM_IP:"
+                // Copy IP, stop at newline or non-printable
+                int j = 0;
+                while (ipPtr[j] && ipPtr[j] != '\n' && ipPtr[j] != '\r' && j < 19) {
+                    cam_ip_address[j] = ipPtr[j];
+                    j++;
+                }
+                cam_ip_address[j] = '\0';
+                printf("Camera IP stored: %s\n", cam_ip_address);
+            }
+
+            // Parse QR result
+            char* ptr = strstr((char*)data, "QR_OK:");
+            if (ptr != NULL) {
+                StringMessage sm;
+                strncpy(sm.data, ptr, sizeof(sm.data) - 1);
+                sm.data[sizeof(sm.data) - 1] = '\0';
+                
+                // Remove trailing newline if exists
+                for (int i = 0; i < sizeof(sm.data); i++) {
+                    if (sm.data[i] == '\n' || sm.data[i] == '\r') {
+                        sm.data[i] = '\0';
+                        break;
+                    }
+                }
+
+                xQueueSend(guiMailbox, &sm, 0);
+            }
         }
 
         vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -184,11 +216,23 @@ void UART_Arm_Task(void *arg)
         if (len > 0)
         {
             data[len] = '\0';
-            printf("ARM -> BASE: %s\n", data);
+            
+            // Filter out garbage from floating RX pin
+            bool hasPrintable = false;
+            for (int i = 0; i < len; i++) {
+                if (data[i] >= 0x20 && data[i] <= 0x7E) {
+                    hasPrintable = true;
+                    break;
+                }
+            }
+            
+            if (hasPrintable) {
+                printf("ARM -> BASE: %s\n", data);
 
-            // 🔥 TODO: Parse ARM feedback
-            // Example:
-            // if (strstr((char*)data, "BOX_PICKED")) { ... }
+                // 🔥 TODO: Parse ARM feedback
+                // Example:
+                // if (strstr((char*)data, "BOX_PICKED")) { ... }
+            }
         }
 
         vTaskDelay(50 / portTICK_PERIOD_MS);
