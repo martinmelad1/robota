@@ -131,6 +131,9 @@ void ARM_MoveJoint(int joint_id, int dir)
 // Global camera IP storage — updated when cam sends CAM_IP:x.x.x.x
 char cam_ip_address[20] = "192.168.4.2"; // Default fallback
 
+// Global ultrasonic distance — updated when cam sends DIST:xx.xx
+volatile float ultrasonic_distance_cm = -1.0f;
+
 // ========================
 // CAMERA TASK
 // ========================
@@ -177,6 +180,14 @@ void UART_Cam_Task(void *arg)
                 }
 
                 xQueueSend(guiMailbox, &sm, 0);
+            }
+
+            // Parse ultrasonic distance
+            char* distPtr = strstr((char*)data, "DIST:");
+            if (distPtr != NULL) {
+                distPtr += 5; // Skip "DIST:"
+                ultrasonic_distance_cm = atof(distPtr);
+                printf("Ultrasonic distance stored: %.2f cm\n", ultrasonic_distance_cm);
             }
         }
 

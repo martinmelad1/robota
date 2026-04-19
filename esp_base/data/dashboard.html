@@ -125,6 +125,45 @@
   .grip-indicator.active-close { background: #1a0f2e; border-color: #a78bfa; color: #a78bfa; }
   .grip-indicator.active-pick  { background: #0f2a1a; border-color: #34d399; color: #34d399; }
   .grip-indicator.inactive     { background: #161825; border-color: #252840; color: #3d4170; }
+
+  /* Ultrasonic distance display */
+  .dist-row {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 12px; padding: 12px;
+    background: #161825; border-radius: 10px;
+    border: 1px solid #252840;
+  }
+  .dist-icon { font-size: 22px; }
+  .dist-info { flex: 1; }
+  .dist-label {
+    font-size: 10px; color: #7c83a0;
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px;
+  }
+  .dist-value {
+    font-size: 28px; font-weight: bold;
+    transition: color 0.3s;
+  }
+  .dist-value.ok      { color: #34d399; }
+  .dist-value.warning  { color: #ef4444; }
+  .dist-value.unknown  { color: #7c83a0; }
+  .dist-unit { font-size: 14px; font-weight: 400; opacity: 0.7; }
+  .dist-bar-wrap {
+    width: 60px; height: 8px;
+    background: #252840; border-radius: 4px; overflow: hidden;
+  }
+  .dist-bar {
+    height: 100%; border-radius: 4px;
+    transition: width 0.3s, background 0.3s;
+  }
+  .dist-bar.ok      { background: #34d399; }
+  .dist-bar.warning  { background: #ef4444; }
+  .dist-status {
+    font-size: 11px; font-weight: 700; letter-spacing: 1px;
+    padding: 3px 10px; border-radius: 12px;
+    white-space: nowrap;
+  }
+  .dist-status.ok     { background: #0f2a1a; color: #34d399; }
+  .dist-status.warning { background: #2a0f0f; color: #ef4444; }
 </style>
 </head>
 <body>
@@ -156,6 +195,19 @@
   <h2>📷 Camera Feed — Scanning for QR Code</h2>
   <img id="cam-feed" src="" style="width:100%; max-width:480px; border-radius:8px; border:2px solid #2d3150;">
   <div id="cam-status" style="margin-top:8px; font-size:14px; color:#a78bfa;">Scanning...</div>
+
+  <!-- Ultrasonic Distance (shown alongside camera feed during scan) -->
+  <div class="dist-row" id="dist-row">
+    <div class="dist-icon">📏</div>
+    <div class="dist-info">
+      <div class="dist-label">Ultrasonic Distance</div>
+      <div class="dist-value unknown" id="dist-val">—<span class="dist-unit"> cm</span></div>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+      <div class="dist-bar-wrap"><div class="dist-bar" id="dist-bar" style="width:0%"></div></div>
+      <div class="dist-status ok" id="dist-status">—</div>
+    </div>
+  </div>
 </div>
 
 <!-- Direction indicator -->
@@ -359,7 +411,6 @@
 
     if (d.pick_status === "scanning") {
       camPanel.style.display = "block";
-      // Refresh the image every time telemetry arrives (~10Hz)
       if (d.cam_ip) {
         camFeed.src = "http://" + d.cam_ip + "/capture?" + Math.random();
       }
@@ -371,6 +422,35 @@
       camStatus.style.color = "#34d399";
     } else {
       camPanel.style.display = "none";
+    }
+
+    // ── Ultrasonic Distance (inside cam panel) ───────────────
+    const distVal = document.getElementById("dist-val");
+    const distBar = document.getElementById("dist-bar");
+    const distStatus = document.getElementById("dist-status");
+
+    if (d.dist !== undefined && d.dist >= 0) {
+      const dist = d.dist;
+      const isWarning = dist > 20;
+      const cls = isWarning ? "warning" : "ok";
+
+      distVal.innerHTML = dist.toFixed(1) + '<span class="dist-unit"> cm</span>';
+      distVal.className = "dist-value " + cls;
+
+      // Bar: scale 0-50cm to 0-100%
+      const barPct = Math.min(100, (dist / 50) * 100);
+      distBar.style.width = barPct + "%";
+      distBar.className = "dist-bar " + cls;
+
+      distStatus.textContent = isWarning ? "TOO FAR" : "IN RANGE";
+      distStatus.className = "dist-status " + cls;
+    } else {
+      distVal.innerHTML = 'NO ECHO<span class="dist-unit"></span>';
+      distVal.className = "dist-value warning";
+      distBar.style.width = "0%";
+      distBar.className = "dist-bar warning";
+      distStatus.textContent = d.dist !== undefined ? "SENSOR" : "NO DATA";
+      distStatus.className = "dist-status warning";
     }
 
     // ── Direction arrows ─────────────────────────────────────

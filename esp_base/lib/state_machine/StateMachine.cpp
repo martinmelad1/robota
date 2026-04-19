@@ -8,6 +8,7 @@ extern QueueHandle_t armMailbox;
 extern HardwareSerial CAM_UART;
 extern HardwareSerial ARM_UART;
 extern char cam_ip_address[20];
+extern volatile float ultrasonic_distance_cm;
 
 // Memory Arrays
 FieldBox field_boxes[TOTAL_TARGETS] = {{"QR_1", "red", 0.0, 0.0, false},
@@ -51,7 +52,8 @@ String MasterStateMachine::getTelemetryJSON() {
   json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) +
           ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
   json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0, \"j4\":0.0,";
-  json += "\"grip\":1";
+  json += "\"grip\":1,";
+  json += "\"dist\":" + String(ultrasonic_distance_cm, 2);
   json += "}";
   return json;
 }

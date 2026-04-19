@@ -6,6 +6,7 @@ void UART_Master_ProcessSerial();
 
 // CAMERA
 void CAM_RequestQR();
+extern volatile float ultrasonic_distance_cm;
 
 // ARM
 void ARM_MoveXYZ(float x, float y, float z);
