@@ -5,22 +5,39 @@
 extern QueueHandle_t pidMailbox;
 
 // ==========================================
-// 1. HARDWARE PIN DEFINITIONS (CORRECTED)
+// 1. HARDWARE PIN DEFINITIONS
 // ==========================================
-// Front Left (FL)
-const int ENA_FL = 32, IN1_FL = 25, IN2_FL = 26, ENC_FL = 18;
 
-// Front Right (FR) 
-const int ENB_FR = 33, IN3_FR = 27, IN4_FR = 14, ENC_FR = 19;
+// Front Left (FL) — L298N Channel A
+const int PWM_FL   = 32;  // ENA
+const int DIR_A_FL = 25;  // IN1
+const int DIR_B_FL = 26;  // IN2
+const int ENC_A_FL = 34;  // Encoder A (input-only GPIO — no internal pull resistor)
+const int ENC_B_FL = 35;  // Encoder B (input-only GPIO — no internal pull resistor)
 
-// Rear Left (RL)
-const int ENA_RL = 12, IN1_RL = 13, IN2_RL = 15, ENC_RL = 21;
+// Front Right (FR) — L298N Channel B
+const int PWM_FR   = 33;  // ENB
+const int DIR_A_FR = 14;  // IN3
+const int DIR_B_FR = 27;  // IN4
+const int ENC_A_FR = 36;  // Encoder A (input-only GPIO — no internal pull resistor)
+const int ENC_B_FR = 39;  // Encoder B (input-only GPIO — no internal pull resistor)
 
-// Rear Right (RR)
-const int ENB_RR = 2, IN3_RR = 4, IN4_RR = 16, ENC_RR = 0;
+// Rear Left (RL) — L298N Channel A
+const int PWM_RL   = 12;  // ENA
+const int DIR_A_RL = 15;  // IN1
+const int DIR_B_RL = 13;  // IN2
+const int ENC_A_RL = 18;  // Encoder A
+const int ENC_B_RL = 19;  // Encoder B
+
+// Rear Right (RR) — L298N Channel B
+const int PWM_RR   = 17;  // ENB
+const int DIR_A_RR = 16;  // IN3
+const int DIR_B_RR = 4;   // IN4
+const int ENC_A_RR = 21;  // Encoder A
+const int ENC_B_RR = 22;  // Encoder B
 
 // PWM Channels (ESP32 Specific)
-const int freq = 5000;
+const int freq = 25000; // 25kHz — above human hearing range, eliminates motor coil whine
 const int res = 8; // 0-255
 
 // Wheel & Encoder Constants
@@ -40,12 +57,20 @@ float speedToTicks(float speed_ms) {
 // ==========================================
 // 2. ENCODER VARIABLES & INTERRUPTS
 // ==========================================
+// Tick counters — both encoder channels (A+B) increment for 2x resolution
 volatile long ticksFL = 0, ticksFR = 0, ticksRL = 0, ticksRR = 0;
 
-void IRAM_ATTR isrFL() { ticksFL++; }
-void IRAM_ATTR isrFR() { ticksFR++; }
-void IRAM_ATTR isrRL() { ticksRL++; }
-void IRAM_ATTR isrRR() { ticksRR++; }
+// Critical section mutex for atomic tick reads (dual-core safe)
+portMUX_TYPE tickMux = portMUX_INITIALIZER_UNLOCKED;
+
+void IRAM_ATTR isrFL_A() { portENTER_CRITICAL_ISR(&tickMux); ticksFL++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrFL_B() { portENTER_CRITICAL_ISR(&tickMux); ticksFL++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrFR_A() { portENTER_CRITICAL_ISR(&tickMux); ticksFR++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrFR_B() { portENTER_CRITICAL_ISR(&tickMux); ticksFR++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrRL_A() { portENTER_CRITICAL_ISR(&tickMux); ticksRL++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrRL_B() { portENTER_CRITICAL_ISR(&tickMux); ticksRL++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrRR_A() { portENTER_CRITICAL_ISR(&tickMux); ticksRR++; portEXIT_CRITICAL_ISR(&tickMux); }
+void IRAM_ATTR isrRR_B() { portENTER_CRITICAL_ISR(&tickMux); ticksRR++; portEXIT_CRITICAL_ISR(&tickMux); }
 
 // ==========================================
 // 3. PID VARIABLES & SETUP
@@ -74,7 +99,8 @@ unsigned long lastTime = 0;
 // ==========================================
 void driveMotor(int pwmChannel, int in1, int in2, double output, bool forward)
 {
-  if (output == 0)
+  // Deadband: below 8/255 PWM the motor won't move — just brake to avoid stutter
+  if (output < 8.0)
   {
     digitalWrite(in1, LOW);
     digitalWrite(in2, LOW);
@@ -91,54 +117,42 @@ void driveMotor(int pwmChannel, int in1, int in2, double output, bool forward)
     digitalWrite(in1, LOW);
     digitalWrite(in2, HIGH);
   }
-  ledcWrite(pwmChannel, abs(output));
+  ledcWrite(pwmChannel, (uint32_t)output);
 }
 
 void PID_Init()
 {
   Serial.begin(115200);
 
-  // Setup Motor Pins
-  pinMode(IN1_FL, OUTPUT);
-  pinMode(IN2_FL, OUTPUT);
-  pinMode(IN3_FR, OUTPUT);
-  pinMode(IN4_FR, OUTPUT);
-  pinMode(IN1_RL, OUTPUT);
-  pinMode(IN2_RL, OUTPUT);
-  pinMode(IN3_RR, OUTPUT);
-  pinMode(IN4_RR, OUTPUT);
+  // Setup Motor Direction Pins
+  pinMode(DIR_A_FR, OUTPUT); pinMode(DIR_B_FR, OUTPUT);
+  pinMode(DIR_A_FL, OUTPUT); pinMode(DIR_B_FL, OUTPUT);
+  pinMode(DIR_A_RR, OUTPUT); pinMode(DIR_B_RR, OUTPUT);
+  pinMode(DIR_A_RL, OUTPUT); pinMode(DIR_B_RL, OUTPUT);
 
-  // Setup ESP32 PWM
-  ledcSetup(0, freq, res);
-  ledcAttachPin(ENA_FL, 0); // FL: Channel 0
-  ledcSetup(1, freq, res);
-  ledcAttachPin(ENB_FR, 1); // FR: Channel 1
-  ledcSetup(2, freq, res);
-  ledcAttachPin(ENA_RL, 2); // RL: Channel 2
-  ledcSetup(3, freq, res);
-  ledcAttachPin(ENB_RR, 3); // RR: Channel 3
+  // Setup ESP32 PWM Channels
+  ledcSetup(0, freq, res); ledcAttachPin(PWM_FL, 0); // FL: Channel 0
+  ledcSetup(1, freq, res); ledcAttachPin(PWM_FR, 1); // FR: Channel 1
+  ledcSetup(2, freq, res); ledcAttachPin(PWM_RL, 2); // RL: Channel 2
+  ledcSetup(3, freq, res); ledcAttachPin(PWM_RR, 3); // RR: Channel 3
 
-  // Setup Encoders
-  pinMode(ENC_FL, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENC_FL), isrFL, RISING);
-  pinMode(ENC_FR, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENC_FR), isrFR, RISING);
-  pinMode(ENC_RL, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENC_RL), isrRL, RISING);
-  pinMode(ENC_RR, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(ENC_RR), isrRR, RISING);
+  // Setup Encoders — A+B channels on RISING for 2x resolution
+  // FL/FR use input-only GPIOs (34,35,36,39) — no internal pull resistor, use INPUT
+  pinMode(ENC_A_FL, INPUT); attachInterrupt(digitalPinToInterrupt(ENC_A_FL), isrFL_A, RISING);
+  pinMode(ENC_B_FL, INPUT); attachInterrupt(digitalPinToInterrupt(ENC_B_FL), isrFL_B, RISING);
+  pinMode(ENC_A_FR, INPUT); attachInterrupt(digitalPinToInterrupt(ENC_A_FR), isrFR_A, RISING);
+  pinMode(ENC_B_FR, INPUT); attachInterrupt(digitalPinToInterrupt(ENC_B_FR), isrFR_B, RISING);
+  // RL/RR use regular GPIOs — INPUT_PULLUP
+  pinMode(ENC_A_RL, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_A_RL), isrRL_A, RISING);
+  pinMode(ENC_B_RL, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_B_RL), isrRL_B, RISING);
+  pinMode(ENC_A_RR, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_A_RR), isrRR_A, RISING);
+  pinMode(ENC_B_RR, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_B_RR), isrRR_B, RISING);
 
   // Setup PID
-  pidFL.SetMode(AUTOMATIC);
-  pidFR.SetMode(AUTOMATIC);
-  pidRL.SetMode(AUTOMATIC);
-  pidRR.SetMode(AUTOMATIC);
-
-  // Sample time 50ms for smooth RPM calculation
-  pidFL.SetSampleTime(50);
-  pidFR.SetSampleTime(50);
-  pidRL.SetSampleTime(50);
-  pidRR.SetSampleTime(50);
+  pidFL.SetMode(AUTOMATIC); pidFL.SetOutputLimits(0, 255); pidFL.SetSampleTime(50);
+  pidFR.SetMode(AUTOMATIC); pidFR.SetOutputLimits(0, 255); pidFR.SetSampleTime(50);
+  pidRL.SetMode(AUTOMATIC); pidRL.SetOutputLimits(0, 255); pidRL.SetSampleTime(50);
+  pidRR.SetMode(AUTOMATIC); pidRR.SetOutputLimits(0, 255); pidRR.SetSampleTime(50);
 }
 
 void PID_Compute(float Vx, float Vy, float Wz)
@@ -157,15 +171,15 @@ void PID_Compute(float Vx, float Vy, float Wz)
   // ==========================================
   if (millis() - lastTime >= 50)
   {
-    // Read ticks
-    inFL = ticksFL;
-    ticksFL = 0;
-    inFR = ticksFR;
-    ticksFR = 0;
-    inRL = ticksRL;
-    ticksRL = 0;
-    inRR = ticksRR;
-    ticksRR = 0;
+    // Atomic tick snapshot — prevents ISR race condition on dual-core ESP32
+    long snapFL, snapFR, snapRL, snapRR;
+    portENTER_CRITICAL(&tickMux);
+    snapFL = ticksFL; ticksFL = 0;
+    snapFR = ticksFR; ticksFR = 0;
+    snapRL = ticksRL; ticksRL = 0;
+    snapRR = ticksRR; ticksRR = 0;
+    portEXIT_CRITICAL(&tickMux);
+    inFL = snapFL; inFR = snapFR; inRL = snapRL; inRR = snapRR;
     lastTime = millis();
 
     // Pass absolute target to PID
@@ -173,6 +187,15 @@ void PID_Compute(float Vx, float Vy, float Wz)
     setFR = abs(targetFR);
     setRL = abs(targetRL);
     setRR = abs(targetRR);
+
+    // Reset integral when motor is commanded to stop (prevents windup jerk on restart)
+    auto resetPID = [](PID& pid, double& out, double set) {
+      if (set == 0.0) { pid.SetMode(MANUAL); out = 0; pid.SetMode(AUTOMATIC); }
+    };
+    resetPID(pidFL, outFL, setFL);
+    resetPID(pidFR, outFR, setFR);
+    resetPID(pidRL, outRL, setRL);
+    resetPID(pidRR, outRR, setRR);
 
     // Compute PWM Output
     pidFL.Compute();
@@ -183,10 +206,10 @@ void PID_Compute(float Vx, float Vy, float Wz)
     // ==========================================
     // STEP 3: DRIVE MOTORS
     // ==========================================
-    driveMotor(0, IN1_FL, IN2_FL, outFL, targetFL >= 0);
-    driveMotor(1, IN3_FR, IN4_FR, outFR, targetFR >= 0);
-    driveMotor(2, IN1_RL, IN2_RL, outRL, targetRL >= 0);
-    driveMotor(3, IN3_RR, IN4_RR, outRR, targetRR >= 0);
+    driveMotor(0, DIR_A_FL, DIR_B_FL, outFL, targetFL >= 0);
+    driveMotor(1, DIR_A_FR, DIR_B_FR, outFR, targetFR >= 0);
+    driveMotor(2, DIR_A_RL, DIR_B_RL, outRL, targetRL >= 0);
+    driveMotor(3, DIR_A_RR, DIR_B_RR, outRR, targetRR >= 0);
 
     // ==========================================
     // STEP 4: TELEPLOT OUTPUT (Tuning Mode)

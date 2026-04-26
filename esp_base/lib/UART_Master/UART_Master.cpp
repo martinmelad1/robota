@@ -22,12 +22,13 @@ extern QueueHandle_t guiMailbox;
 
 #define BUF_SIZE 1024
 
-// Pins — MUST NOT conflict with PID motor pins (25,26,14,15,etc.)
-#define CAM_TX 17
-#define CAM_RX 5
+// UART1 (CAM): safe pins, no conflict with motors or Serial
+#define CAM_TX 23  // GPIO23
+#define CAM_RX 5   // GPIO5
 
-#define ARM_TX 23
-#define ARM_RX 35   // GPIO 35 is input-only, perfect for RX
+// UART2 (ARM): safe pins, no conflict with motors or Serial
+#define ARM_TX 0   // GPIO0
+#define ARM_RX 2   // GPIO2
 
 // ========================
 // INIT
