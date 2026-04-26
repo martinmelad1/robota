@@ -51,7 +51,7 @@ String MasterStateMachine::getTelemetryJSON() {
   json += "\"px\":0.0, \"py\":0.0, \"hdg\":0.0,";
   json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) +
           ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
-  json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0, \"j4\":0.0,";
+  json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0,";
   json += "\"grip\":1,";
   json += "\"dist\":" + String(ultrasonic_distance_cm, 2);
   json += "}";
@@ -143,11 +143,11 @@ void MasterStateMachine::update() {
       isArmCmd = true;
     } else if (cmdStr == "J2_UP") {
       arm_motion.joint_id = 2;
-      arm_motion.direction = ArmDir::UP;
+      arm_motion.direction = ArmDir::DOWN;
       isArmCmd = true;
     } else if (cmdStr == "J2_DOWN") {
       arm_motion.joint_id = 2;
-      arm_motion.direction = ArmDir::DOWN;
+      arm_motion.direction = ArmDir::UP;
       isArmCmd = true;
     } else if (cmdStr == "J3_UP") {
       arm_motion.joint_id = 3;
@@ -155,14 +155,6 @@ void MasterStateMachine::update() {
       isArmCmd = true;
     } else if (cmdStr == "J3_DOWN") {
       arm_motion.joint_id = 3;
-      arm_motion.direction = ArmDir::DOWN;
-      isArmCmd = true;
-    } else if (cmdStr == "J4_UP") {
-      arm_motion.joint_id = 4;
-      arm_motion.direction = ArmDir::UP;
-      isArmCmd = true;
-    } else if (cmdStr == "J4_DOWN") {
-      arm_motion.joint_id = 4;
       arm_motion.direction = ArmDir::DOWN;
       isArmCmd = true;
     } else if (cmdStr == "GRIP_OPEN") {

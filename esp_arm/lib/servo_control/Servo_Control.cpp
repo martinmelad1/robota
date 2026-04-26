@@ -6,14 +6,12 @@ QueueHandle_t servoMailbox;
 Servo servo1;
 Servo servo2;
 Servo servo3;
-Servo servo4;
-Servo servoGrip; // 5th servo for the gripper
+Servo servoGrip; // Gripper servo
 
 // Initial angles (start at 90 degrees)
 int angle1 = 90;
 int angle2 = 90;
 int angle3 = 90;
-int angle4 = 90;
 
 // Variables to keep track of current continuous movement
 int current_active_joint = 0;
@@ -30,21 +28,18 @@ void Servo_Control_Init() {
     servo1.setPeriodHertz(50);
     servo2.setPeriodHertz(50);
     servo3.setPeriodHertz(50);
-    servo4.setPeriodHertz(50);
     servoGrip.setPeriodHertz(50);
 
     // Attach pins (min/max pulse width in microseconds)
     servo1.attach(SERVO_1_PIN, 500, 2400);
     servo2.attach(SERVO_2_PIN, 500, 2400);
     servo3.attach(SERVO_3_PIN, 500, 2400);
-    servo4.attach(SERVO_4_PIN, 500, 2400);
     servoGrip.attach(SERVO_GRIP_PIN, 500, 2400);
 
     // Go to initial position
     servo1.write(angle1);
     servo2.write(angle2);
     servo3.write(angle3);
-    servo4.write(angle4);
     servoGrip.write(GRIP_ANGLE_OPEN); // Default gripper open
 
 
@@ -86,15 +81,6 @@ void update_angle(int joint, int dir) {
             servo3.write(angle3);
             if (angle3 % 5 == 0) Serial.printf("Actuating Servo 3 to %d deg\n", angle3);
         }
-    } else if (joint == 4) {
-        int old_angle = angle4;
-        angle4 += dir;
-        if (angle4 > SERVO_MAX_ANGLE) angle4 = SERVO_MAX_ANGLE;
-        if (angle4 < SERVO_MIN_ANGLE) angle4 = SERVO_MIN_ANGLE;
-        if (angle4 != old_angle) {
-            servo4.write(angle4);
-            if (angle4 % 5 == 0) Serial.printf("Actuating Servo 4 to %d deg\n", angle4);
-        }
     }
 }
 
@@ -121,7 +107,7 @@ void Servo_Control_Task(void *arg) {
                     Serial.println("Gripper Action -> PICK");
                 }
             } else {
-                // Continuous Sweep Arms (1-4)
+                // Continuous Sweep Arms (1-3)
                 Serial.print("Servo_Control_Task Received Command -> Joint: ");
                 Serial.print(cmd.joint_id);
                 Serial.print(", Direction: ");

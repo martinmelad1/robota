@@ -1,9 +1,9 @@
 #include "Standalone_Server.h"
-#include <WiFi.h>
+#include "Servo_Control.h"
+#include "driver/gpio.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
-#include "driver/gpio.h"
-#include "Servo_Control.h"
+#include <WiFi.h>
 
 static AsyncWebServer server(80);
 static AsyncWebSocket ws("/ws");
@@ -91,11 +91,7 @@ const char arm_html[] PROGMEM = R"rawliteral(<!DOCTYPE html>
   <div class="btn-arm" id="j3up">&#x25B2;<span class="lbl">Up</span></div>
   <div class="btn-arm" id="j3dn">&#x25BC;<span class="lbl">Down</span></div>
 </div>
-<div class="joint-row">
-  <div class="joint-label">J4</div>
-  <div class="btn-arm" id="j4up">&#x25B2;<span class="lbl">Up</span></div>
-  <div class="btn-arm" id="j4dn">&#x25BC;<span class="lbl">Down</span></div>
-</div>
+
 
 <hr class="divider">
 
@@ -142,8 +138,7 @@ const char arm_html[] PROGMEM = R"rawliteral(<!DOCTYPE html>
   bindHoldButton("j2dn", "J2_DOWN", "ARM_STOP");
   bindHoldButton("j3up", "J3_UP",   "ARM_STOP");
   bindHoldButton("j3dn", "J3_DOWN", "ARM_STOP");
-  bindHoldButton("j4up", "J4_UP",   "ARM_STOP");
-  bindHoldButton("j4dn", "J4_DOWN", "ARM_STOP");
+
 </script>
 </body>
 </html>)rawliteral";
@@ -151,51 +146,75 @@ const char arm_html[] PROGMEM = R"rawliteral(<!DOCTYPE html>
 static void processWsCommand(String cmd) {
   // If UART RX was high recently, the base is connected. IGNORE WIFI COMMANDS.
   if (millis() - last_uart_rx_high < 1000) {
-      Serial.println("\n[ARM] UART Base detected. Ignoring Wi-Fi Command: " + cmd);
-      return; 
+    Serial.println("\n[ARM] UART Base detected. Ignoring Wi-Fi Command: " +
+                   cmd);
+    return;
   }
 
   ServoCommand sc;
-  sc.joint_id = -1; 
+  sc.joint_id = -1;
   sc.direction = 0;
 
-  if (cmd == "J1_UP") { sc.joint_id = 1; sc.direction = 1; }
-  else if (cmd == "J1_DOWN") { sc.joint_id = 1; sc.direction = -1; }
-  else if (cmd == "J2_UP") { sc.joint_id = 2; sc.direction = 1; }
-  else if (cmd == "J2_DOWN") { sc.joint_id = 2; sc.direction = -1; }
-  else if (cmd == "J3_UP") { sc.joint_id = 3; sc.direction = 1; }
-  else if (cmd == "J3_DOWN") { sc.joint_id = 3; sc.direction = -1; }
-  else if (cmd == "J4_UP") { sc.joint_id = 4; sc.direction = 1; }
-  else if (cmd == "J4_DOWN") { sc.joint_id = 4; sc.direction = -1; }
-  else if (cmd == "ARM_STOP" || cmd == "ESTOP") { sc.joint_id = 0; sc.direction = 0; }
-  else if (cmd == "GRIP_OPEN") { sc.joint_id = 5; sc.direction = 1; }
-  else if (cmd == "GRIP_CLOSE") { sc.joint_id = 5; sc.direction = -1; }
-  else if (cmd == "GRIP_PICK") { sc.joint_id = 5; sc.direction = 2; }
+  if (cmd == "J1_UP") {
+    sc.joint_id = 1;
+    sc.direction = 1;
+  } else if (cmd == "J1_DOWN") {
+    sc.joint_id = 1;
+    sc.direction = -1;
+  } else if (cmd == "J2_UP") {
+    sc.joint_id = 2;
+    sc.direction = -1;
+  } else if (cmd == "J2_DOWN") {
+    sc.joint_id = 2;
+    sc.direction = 1;
+  } else if (cmd == "J3_UP") {
+    sc.joint_id = 3;
+    sc.direction = 1;
+  } else if (cmd == "J3_DOWN") {
+    sc.joint_id = 3;
+    sc.direction = -1;
+  }
+
+  else if (cmd == "ARM_STOP" || cmd == "ESTOP") {
+    sc.joint_id = 0;
+    sc.direction = 0;
+  } else if (cmd == "GRIP_OPEN") {
+    sc.joint_id = 5;
+    sc.direction = 1;
+  } else if (cmd == "GRIP_CLOSE") {
+    sc.joint_id = 5;
+    sc.direction = -1;
+  } else if (cmd == "GRIP_PICK") {
+    sc.joint_id = 5;
+    sc.direction = 2;
+  }
 
   if (sc.joint_id != -1 && servoMailbox != NULL) {
-      xQueueSend(servoMailbox, &sc, 0);
+    xQueueSend(servoMailbox, &sc, 0);
   }
 }
 
-static void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len) {
-    if (type == WS_EVT_DATA) {
-        String msg = String((char*)data).substring(0, len);
-        processWsCommand(msg);
-    }
+static void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
+                      AwsEventType type, void *arg, uint8_t *data, size_t len) {
+  if (type == WS_EVT_DATA) {
+    String msg = String((char *)data).substring(0, len);
+    processWsCommand(msg);
+  }
 }
 
 void Standalone_Server_Init() {
-  // Explicitly pull down RX (pin 16). If the Master Base is powered and connected,
-  // its TX line will drive this HIGH. If unplugged, it will drop LOW.
+  // Explicitly pull down RX (pin 16). If the Master Base is powered and
+  // connected, its TX line will drive this HIGH. If unplugged, it will drop
+  // LOW.
   gpio_set_pull_mode((gpio_num_t)16, GPIO_PULLDOWN_ONLY);
 
   // Fallback Wi-Fi and Web server
   WiFi.softAP("ArmControl", "robot1234");
-  
+
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
-  server.on("/", HTTP_GET, [](AsyncWebServerRequest *req){
-      req->send(200, "text/html", arm_html);
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *req) {
+    req->send(200, "text/html", arm_html);
   });
   server.begin();
 
@@ -207,9 +226,9 @@ void Standalone_Server_Init() {
 void Standalone_Server_Update() {
   // Read UART connection status
   if (gpio_get_level((gpio_num_t)16) == 1) {
-      last_uart_rx_high = millis();
+    last_uart_rx_high = millis();
   }
-  
+
   // Cleanup disconnected websocket clients
   ws.cleanupClients();
 }

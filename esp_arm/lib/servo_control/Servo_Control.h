@@ -5,11 +5,11 @@
 #include <ESP32Servo.h>
 
 // Define servo pins (change these to match actual wiring. Avoid pins 12,13,14,15 as they often conflict with JTAG)
-#define SERVO_1_PIN 25
-#define SERVO_2_PIN 26
-#define SERVO_3_PIN 27
-#define SERVO_4_PIN 33
-#define SERVO_GRIP_PIN 32 // 5th servo for the gripper
+#define SERVO_1_PIN 33
+#define SERVO_2_PIN 25
+#define SERVO_3_PIN 26
+
+#define SERVO_GRIP_PIN 27 // 5th servo for the gripper
 
 // Physical limits of the Servos (Adjust these if the servo hits a hard stop and jitters!)
 #define SERVO_MIN_ANGLE 0
@@ -22,7 +22,7 @@
 
 // Structure to hold servo commands
 struct ServoCommand {
-    int joint_id;  // 1 to 4. 0 implies no specific joint
+    int joint_id;  // 1 to 3. 0 implies no specific joint
     int direction; // 1 = Increase angle, -1 = Decrease angle, 0 = STOP
 };
 

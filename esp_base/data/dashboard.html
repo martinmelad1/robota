@@ -277,7 +277,7 @@
 
 <!-- Arm joints -->
 <div class="card">
-  <h2>Arm joints (J1 – J4)</h2>
+  <h2>Arm joints (J1 – J3)</h2>
   <div class="joint-row">
     <span class="jlbl">J1</span>
     <div class="jbar-wrap"><div class="jbar" id="j1-bar" style="width:50%"></div></div>
@@ -293,11 +293,7 @@
     <div class="jbar-wrap"><div class="jbar" id="j3-bar" style="width:50%"></div></div>
     <span class="jval" id="j3">90 deg</span>
   </div>
-  <div class="joint-row">
-    <span class="jlbl">J4</span>
-    <div class="jbar-wrap"><div class="jbar" id="j4-bar" style="width:50%"></div></div>
-    <span class="jval" id="j4">90 deg</span>
-  </div>
+
 </div>
 
 <!-- Gripper -->
@@ -484,11 +480,9 @@
     document.getElementById("j1").textContent      = d.j1 + " deg";
     document.getElementById("j2").textContent      = d.j2 + " deg";
     document.getElementById("j3").textContent      = d.j3 + " deg";
-    document.getElementById("j4").textContent      = d.j4 + " deg";
     document.getElementById("j1-bar").style.width  = angleToBar(d.j1) + "%";
     document.getElementById("j2-bar").style.width  = angleToBar(d.j2) + "%";
     document.getElementById("j3-bar").style.width  = angleToBar(d.j3) + "%";
-    document.getElementById("j4-bar").style.width  = angleToBar(d.j4) + "%";
 
     // ── Gripper indicators ───────────────────────────────────
     const giOpen  = document.getElementById("gi-open");
