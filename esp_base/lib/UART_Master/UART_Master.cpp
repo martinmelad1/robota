@@ -209,7 +209,7 @@ void UART_Arm_Task(void *arg)
         ArmMotion motion_cmd;
         if (xQueueReceive(armMailbox, &motion_cmd, 0) == pdTRUE) {
             // Forward it to ARM via UART
-            if (motion_cmd.joint_id == 5) {
+            if (motion_cmd.joint_id == 6) { // Virtual joint for instant gripper commands
                 if (motion_cmd.direction == ArmDir::UP) {
                     ARM_Grip(0); // Open
                 } else if (motion_cmd.direction == ArmDir::DOWN) {

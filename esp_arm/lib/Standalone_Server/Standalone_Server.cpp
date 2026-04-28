@@ -91,15 +91,20 @@ const char arm_html[] PROGMEM = R"rawliteral(<!DOCTYPE html>
   <div class="btn-arm" id="j3up">&#x25B2;<span class="lbl">Up</span></div>
   <div class="btn-arm" id="j3dn">&#x25BC;<span class="lbl">Down</span></div>
 </div>
+<div class="joint-row">
+  <div class="joint-label" style="font-size:10px;">GRIP</div>
+  <div class="btn-arm" id="gripup">&#x1F91C;<span class="lbl">Open</span></div>
+  <div class="btn-arm" id="gripdn">&#x270A;<span class="lbl">Close</span></div>
+</div>
 
 
 <hr class="divider">
 
 <div class="sec-label">Gripper — tap to activate</div>
 <div class="gripper-row">
-  <div class="btn-grip grip-open"  onpointerdown="send('GRIP_OPEN')">&#x1F91C;<span class="glbl">Open</span></div>
-  <div class="btn-grip grip-close" onpointerdown="send('GRIP_CLOSE')">&#x270A;<span class="glbl">Close</span></div>
-  <div class="btn-grip grip-pick"  onpointerdown="send('GRIP_PICK')">&#x1F4E6;<span class="glbl">Pick</span></div>
+  <div class="btn-grip grip-open"  onpointerdown="send('GRIP_TAP_OPEN')">&#x1F91C;<span class="glbl">Open</span></div>
+  <div class="btn-grip grip-close" onpointerdown="send('GRIP_TAP_CLOSE')">&#x270A;<span class="glbl">Close</span></div>
+  <div class="btn-grip grip-pick"  onpointerdown="send('GRIP_TAP_PICK')">&#x1F4E6;<span class="glbl">Pick</span></div>
 </div>
 
 <script>
@@ -138,6 +143,8 @@ const char arm_html[] PROGMEM = R"rawliteral(<!DOCTYPE html>
   bindHoldButton("j2dn", "J2_DOWN", "ARM_STOP");
   bindHoldButton("j3up", "J3_UP",   "ARM_STOP");
   bindHoldButton("j3dn", "J3_DOWN", "ARM_STOP");
+  bindHoldButton("gripup", "GRIP_OPEN", "ARM_STOP");
+  bindHoldButton("gripdn", "GRIP_CLOSE", "ARM_STOP");
 
 </script>
 </body>
@@ -163,16 +170,16 @@ static void processWsCommand(String cmd) {
     sc.direction = -1;
   } else if (cmd == "J2_UP") {
     sc.joint_id = 2;
-    sc.direction = -1;
+    sc.direction = 1;
   } else if (cmd == "J2_DOWN") {
     sc.joint_id = 2;
-    sc.direction = 1;
+    sc.direction = -1;
   } else if (cmd == "J3_UP") {
     sc.joint_id = 3;
-    sc.direction = 1;
+    sc.direction = -1;
   } else if (cmd == "J3_DOWN") {
     sc.joint_id = 3;
-    sc.direction = -1;
+    sc.direction = 1;
   }
 
   else if (cmd == "ARM_STOP" || cmd == "ESTOP") {
@@ -184,8 +191,14 @@ static void processWsCommand(String cmd) {
   } else if (cmd == "GRIP_CLOSE") {
     sc.joint_id = 5;
     sc.direction = -1;
-  } else if (cmd == "GRIP_PICK") {
-    sc.joint_id = 5;
+  } else if (cmd == "GRIP_TAP_OPEN") {
+    sc.joint_id = 6;
+    sc.direction = 1;
+  } else if (cmd == "GRIP_TAP_CLOSE") {
+    sc.joint_id = 6;
+    sc.direction = -1;
+  } else if (cmd == "GRIP_TAP_PICK") {
+    sc.joint_id = 6;
     sc.direction = 2;
   }
 

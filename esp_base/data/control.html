@@ -1,289 +1,537 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Robot Control</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-  body {
-    font-family: sans-serif;
-    background: #0f1117;
-    color: #e2e8f0;
-    padding: 12px;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-  .header h1 { font-size: 16px; color: #a78bfa; }
-  #conn { font-size: 11px; }
-  .connected    { color: #34d399; }
-  .disconnected { color: #ef4444; }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Robot Control</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
 
-  .estop {
-    width: 100%; padding: 14px;
-    background: #450a0a; border: 2px solid #ef4444;
-    border-radius: 12px; color: #ef4444;
-    font-size: 16px; font-weight: 700; letter-spacing: 2px;
-    margin-bottom: 10px; cursor: pointer; touch-action: manipulation;
-  }
-  .estop:active { background: #ef4444; color: #fff; }
+    body {
+      font-family: sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 12px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
 
-  .mode-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px; }
-  .mode-btn {
-    padding: 10px 4px; border-radius: 10px;
-    font-size: 11px; font-weight: 600; text-align: center;
-    cursor: pointer; touch-action: manipulation;
-    border: 1px solid; transition: all 0.15s;
-  }
-  .mode-manual        { background: #0f1a2e; border-color: #2c4a7a; color: #60a5fa; }
-  .mode-manual.active { background: #1a3a6a; border-color: #60a5fa; color: #fff; }
-  .mode-auto          { background: #0f2a1a; border-color: #1a5a30; color: #34d399; }
-  .mode-auto.active   { background: #1a4a2a; border-color: #34d399; color: #fff; }
-  .mode-pick          { background: #1a0f2e; border-color: #6d28d9; color: #a78bfa; }
-  .mode-pick.active   { background: #2e1a5e; border-color: #a78bfa; color: #fff; }
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
 
-  .mode-badge {
-    display: inline-block; padding: 3px 10px; border-radius: 20px;
-    font-size: 10px; font-weight: 700; letter-spacing: 1px; margin-bottom: 8px;
-  }
-  .badge-manual { background: #1a3a6a; color: #60a5fa; }
-  .badge-auto   { background: #1a4a2a; color: #34d399; }
-  .badge-pick   { background: #2e1a5e; color: #a78bfa; }
+    .header h1 {
+      font-size: 16px;
+      color: #a78bfa;
+    }
 
-  .sec-label {
-    font-size: 10px; color: #7c83a0; text-transform: uppercase;
-    letter-spacing: 1px; margin-bottom: 6px; margin-top: 10px;
-  }
+    #conn {
+      font-size: 11px;
+    }
 
-  .dpad {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 68px); gap: 5px; margin-bottom: 4px;
-  }
-  .btn {
-    background: #1e2130; border: 1px solid #2d3150; border-radius: 10px;
-    color: #e2e8f0; font-size: 22px;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 2px;
-    cursor: pointer; touch-action: none;
-    transition: background 0.08s, transform 0.08s;
-    user-select: none; -webkit-user-select: none;
-  }
-  .btn span.lbl { font-size: 9px; color: #7c83a0; }
-  .btn.active   { background: #a78bfa; transform: scale(0.92); }
-  .btn.diag     { background: #161825; border-color: #252840; color: #7c83a0; font-size: 18px; }
-  .btn.diag.active { background: #534AB7; color: #fff; }
-  .btn.stop-center {
-    background: #450a0a; border: 1px solid #ef4444;
-    color: #ef4444; font-size: 11px; font-weight: 700;
-  }
-  .btn.stop-center.active { background: #ef4444; color: #fff; }
+    .connected {
+      color: #34d399;
+    }
 
-  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-  .btn-rot {
-    background: #1e2130; border: 1px solid #2d3150; border-radius: 10px;
-    color: #a78bfa; font-size: 14px; padding: 12px 6px; text-align: center;
-    cursor: pointer; touch-action: none;
-    transition: background 0.08s, transform 0.08s;
-    user-select: none; -webkit-user-select: none;
-  }
-  .btn-rot.active { background: #a78bfa; color: #fff; transform: scale(0.93); }
+    .disconnected {
+      color: #ef4444;
+    }
 
-  .joint-row {
-    display: grid; grid-template-columns: 36px 1fr 1fr;
-    gap: 5px; align-items: stretch; margin-bottom: 6px;
-  }
-  .joint-label {
-    font-size: 11px; font-weight: 700; color: #7c83a0; text-align: center;
-    background: #1e2130; border-radius: 6px; padding: 6px 0;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .btn-arm {
-    background: #0f2a1a; border: 2px solid #34d399; border-radius: 10px;
-    color: #34d399; font-size: 20px; padding: 18px 6px;
-    cursor: pointer; touch-action: none;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 3px;
-    transition: background 0.08s, transform 0.08s;
-    user-select: none; -webkit-user-select: none;
-  }
-  .btn-arm .lbl { font-size: 9px; color: #34d399; }
-  .btn-arm.active { background: #34d399; color: #000; transform: scale(0.95); }
-  .btn-arm.active .lbl { color: #000; }
+    .estop {
+      width: 100%;
+      padding: 14px;
+      background: #450a0a;
+      border: 2px solid #ef4444;
+      border-radius: 12px;
+      color: #ef4444;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
 
-  .gripper-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-top: 6px; }
-  .btn-grip {
-    padding: 16px 6px; border-radius: 12px; font-size: 22px; font-weight: 700;
-    text-align: center; cursor: pointer; touch-action: manipulation; border: 2px solid;
-    transition: all 0.12s; display: flex; flex-direction: column; align-items: center; gap: 4px;
-  }
-  .btn-grip .glbl { font-size: 9px; font-weight: 400; opacity: 0.8; }
-  .grip-open  { background: #0f1a2e; border-color: #60a5fa; color: #60a5fa; }
-  .grip-open:active  { background: #60a5fa; color: #000; }
-  .grip-close { background: #1a0f2e; border-color: #a78bfa; color: #a78bfa; }
-  .grip-close:active { background: #a78bfa; color: #000; }
-  .grip-pick  { background: #0f2a1a; border-color: #34d399; color: #34d399; }
-  .grip-pick:active  { background: #34d399; color: #000; }
+    .estop:active {
+      background: #ef4444;
+      color: #fff;
+    }
 
-  .divider { border: none; border-top: 1px solid #1e2130; margin: 10px 0; }
-</style>
+    .mode-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .mode-btn {
+      padding: 10px 4px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 1px solid;
+      transition: all 0.15s;
+    }
+
+    .mode-manual {
+      background: #0f1a2e;
+      border-color: #2c4a7a;
+      color: #60a5fa;
+    }
+
+    .mode-manual.active {
+      background: #1a3a6a;
+      border-color: #60a5fa;
+      color: #fff;
+    }
+
+    .mode-auto {
+      background: #0f2a1a;
+      border-color: #1a5a30;
+      color: #34d399;
+    }
+
+    .mode-auto.active {
+      background: #1a4a2a;
+      border-color: #34d399;
+      color: #fff;
+    }
+
+    .mode-pick {
+      background: #1a0f2e;
+      border-color: #6d28d9;
+      color: #a78bfa;
+    }
+
+    .mode-pick.active {
+      background: #2e1a5e;
+      border-color: #a78bfa;
+      color: #fff;
+    }
+
+    .mode-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .badge-manual {
+      background: #1a3a6a;
+      color: #60a5fa;
+    }
+
+    .badge-auto {
+      background: #1a4a2a;
+      color: #34d399;
+    }
+
+    .badge-pick {
+      background: #2e1a5e;
+      color: #a78bfa;
+    }
+
+    .sec-label {
+      font-size: 10px;
+      color: #7c83a0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      margin-top: 10px;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 68px);
+      gap: 5px;
+      margin-bottom: 4px;
+    }
+
+    .btn {
+      background: #1e2130;
+      border: 1px solid #2d3150;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+      touch-action: none;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn span.lbl {
+      font-size: 9px;
+      color: #7c83a0;
+    }
+
+    .btn.active {
+      background: #a78bfa;
+      transform: scale(0.92);
+    }
+
+    .btn.diag {
+      background: #161825;
+      border-color: #252840;
+      color: #7c83a0;
+      font-size: 18px;
+    }
+
+    .btn.diag.active {
+      background: #534AB7;
+      color: #fff;
+    }
+
+    .btn.stop-center {
+      background: #450a0a;
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .btn.stop-center.active {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .btn-rot {
+      background: #1e2130;
+      border: 1px solid #2d3150;
+      border-radius: 10px;
+      color: #a78bfa;
+      font-size: 14px;
+      padding: 12px 6px;
+      text-align: center;
+      cursor: pointer;
+      touch-action: none;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-rot.active {
+      background: #a78bfa;
+      color: #fff;
+      transform: scale(0.93);
+    }
+
+    .joint-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 1fr;
+      gap: 5px;
+      align-items: stretch;
+      margin-bottom: 6px;
+    }
+
+    .joint-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #7c83a0;
+      text-align: center;
+      background: #1e2130;
+      border-radius: 6px;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-arm {
+      background: #0f2a1a;
+      border: 2px solid #34d399;
+      border-radius: 10px;
+      color: #34d399;
+      font-size: 20px;
+      padding: 18px 6px;
+      cursor: pointer;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 3px;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-arm .lbl {
+      font-size: 9px;
+      color: #34d399;
+    }
+
+    .btn-arm.active {
+      background: #34d399;
+      color: #000;
+      transform: scale(0.95);
+    }
+
+    .btn-arm.active .lbl {
+      color: #000;
+    }
+
+    .gripper-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .btn-grip {
+      padding: 16px 6px;
+      border-radius: 12px;
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 2px solid;
+      transition: all 0.12s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-grip .glbl {
+      font-size: 9px;
+      font-weight: 400;
+      opacity: 0.8;
+    }
+
+    .grip-open {
+      background: #0f1a2e;
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .grip-open:active {
+      background: #60a5fa;
+      color: #000;
+    }
+
+    .grip-close {
+      background: #1a0f2e;
+      border-color: #a78bfa;
+      color: #a78bfa;
+    }
+
+    .grip-close:active {
+      background: #a78bfa;
+      color: #000;
+    }
+
+    .grip-pick {
+      background: #0f2a1a;
+      border-color: #34d399;
+      color: #34d399;
+    }
+
+    .grip-pick:active {
+      background: #34d399;
+      color: #000;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2130;
+      margin: 10px 0;
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="header">
-  <h1>Robot Control</h1>
-  <span id="conn" class="disconnected">● Connecting...</span>
-</div>
+  <div class="header">
+    <h1>Robot Control</h1>
+    <span id="conn" class="disconnected">● Connecting...</span>
+  </div>
 
-<button class="estop" onpointerdown="emergencyStop()">&#9632; EMERGENCY STOP</button>
+  <button class="estop" onpointerdown="emergencyStop()">&#9632; EMERGENCY STOP</button>
 
-<div class="mode-row">
-  <div class="mode-btn mode-manual active" id="btn-manual" onpointerdown="setMode('MANUAL')">&#9632; Manual</div>
-  <div class="mode-btn mode-auto"          id="btn-auto"   onpointerdown="setMode('AUTO')">&#9654; Auto</div>
-  <div class="mode-btn mode-pick"          id="btn-pick"   onpointerdown="setMode('PICK')">&#x1F4E6; Auto Pick</div>
-</div>
-<div id="mode-badge" class="mode-badge badge-manual">MANUAL MODE</div>
+  <div class="mode-row">
+    <div class="mode-btn mode-manual active" id="btn-manual" onpointerdown="setMode('MANUAL')">&#9632; Manual</div>
+    <div class="mode-btn mode-auto" id="btn-auto" onpointerdown="setMode('AUTO')">&#9654; Auto</div>
+    <div class="mode-btn mode-pick" id="btn-pick" onpointerdown="setMode('PICK')">&#x1F4E6; Auto Pick</div>
+  </div>
+  <div id="mode-badge" class="mode-badge badge-manual">MANUAL MODE</div>
 
-<hr class="divider">
+  <hr class="divider">
 
-<div class="sec-label">Movement — press once to start, release to stop</div>
-<div class="dpad">
-  <div class="btn diag"        id="mv-fl">&#x2196;<span class="lbl">fwd-left</span></div>
-  <div class="btn"             id="mv-fw">&#x25B2;<span class="lbl">forward</span></div>
-  <div class="btn diag"        id="mv-fr">&#x2197;<span class="lbl">fwd-right</span></div>
-  <div class="btn"             id="mv-ll">&#x25C4;<span class="lbl">strafe L</span></div>
-  <div class="btn stop-center" id="mv-st">STOP</div>
-  <div class="btn"             id="mv-rr">&#x25BA;<span class="lbl">strafe R</span></div>
-  <div class="btn diag"        id="mv-bl">&#x2199;<span class="lbl">bwd-left</span></div>
-  <div class="btn"             id="mv-bw">&#x25BC;<span class="lbl">backward</span></div>
-  <div class="btn diag"        id="mv-br">&#x2198;<span class="lbl">bwd-right</span></div>
-</div>
+  <div class="sec-label">Movement — press once to start, release to stop</div>
+  <div class="dpad">
+    <div class="btn diag" id="mv-fl">&#x2196;<span class="lbl">fwd-left</span></div>
+    <div class="btn" id="mv-fw">&#x25B2;<span class="lbl">forward</span></div>
+    <div class="btn diag" id="mv-fr">&#x2197;<span class="lbl">fwd-right</span></div>
+    <div class="btn" id="mv-ll">&#x25C4;<span class="lbl">strafe L</span></div>
+    <div class="btn stop-center" id="mv-st">STOP</div>
+    <div class="btn" id="mv-rr">&#x25BA;<span class="lbl">strafe R</span></div>
+    <div class="btn diag" id="mv-bl">&#x2199;<span class="lbl">bwd-left</span></div>
+    <div class="btn" id="mv-bw">&#x25BC;<span class="lbl">backward</span></div>
+    <div class="btn diag" id="mv-br">&#x2198;<span class="lbl">bwd-right</span></div>
+  </div>
 
-<div class="sec-label">Rotation — press once to start, release to stop</div>
-<div class="two-col">
-  <div class="btn-rot" id="rot-l">&#x21BA; Rotate Left</div>
-  <div class="btn-rot" id="rot-r">&#x21BB; Rotate Right</div>
-</div>
+  <div class="sec-label">Rotation — press once to start, release to stop</div>
+  <div class="two-col">
+    <div class="btn-rot" id="rot-l">&#x21BA; Rotate Left</div>
+    <div class="btn-rot" id="rot-r">&#x21BB; Rotate Right</div>
+  </div>
 
-<hr class="divider">
+  <hr class="divider">
 
-<div class="sec-label">Arm — press once to move, release to stop</div>
-<div class="joint-row">
-  <div class="joint-label">J1</div>
-  <div class="btn-arm" id="j1up">&#x21BA;<span class="lbl">CCW</span></div>
-  <div class="btn-arm" id="j1dn">&#x21BB;<span class="lbl">CW</span></div>
-</div>
-<div class="joint-row">
-  <div class="joint-label">J2</div>
-  <div class="btn-arm" id="j2up">&#x25B2;<span class="lbl">Up</span></div>
-  <div class="btn-arm" id="j2dn">&#x25BC;<span class="lbl">Down</span></div>
-</div>
-<div class="joint-row">
-  <div class="joint-label">J3</div>
-  <div class="btn-arm" id="j3up">&#x25B2;<span class="lbl">Up</span></div>
-  <div class="btn-arm" id="j3dn">&#x25BC;<span class="lbl">Down</span></div>
-</div>
+  <div class="sec-label">Arm — press once to move, release to stop</div>
+  <div class="joint-row">
+    <div class="joint-label">J1</div>
+    <div class="btn-arm" id="j1up">&#x21BA;<span class="lbl">CCW</span></div>
+    <div class="btn-arm" id="j1dn">&#x21BB;<span class="lbl">CW</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label">J2</div>
+    <div class="btn-arm" id="j2up">&#x25B2;<span class="lbl">Up</span></div>
+    <div class="btn-arm" id="j2dn">&#x25BC;<span class="lbl">Down</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label">J3</div>
+    <div class="btn-arm" id="j3up">&#x25B2;<span class="lbl">Up</span></div>
+    <div class="btn-arm" id="j3dn">&#x25BC;<span class="lbl">Down</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label" style="font-size:9px;">GRIP</div>
+    <div class="btn-arm" id="gripup">&#x1F91C;<span class="lbl">Open</span></div>
+    <div class="btn-arm" id="gripdn">&#x270A;<span class="lbl">Close</span></div>
+  </div>
 
 
-<hr class="divider">
+  <hr class="divider">
 
-<div class="sec-label">Gripper — tap to activate</div>
-<div class="gripper-row">
-  <div class="btn-grip grip-open"  onpointerdown="send('GRIP_OPEN')">&#x1F91C;<span class="glbl">Open</span></div>
-  <div class="btn-grip grip-close" onpointerdown="send('GRIP_CLOSE')">&#x270A;<span class="glbl">Close</span></div>
-  <div class="btn-grip grip-pick"  onpointerdown="send('GRIP_PICK')">&#x1F4E6;<span class="glbl">Pick</span></div>
-</div>
+  <div class="sec-label">Gripper — tap to activate</div>
+  <div class="gripper-row">
+    <div class="btn-grip grip-open" onpointerdown="send('GRIP_TAP_OPEN')">&#x1F91C;<span class="glbl">Open</span></div>
+    <div class="btn-grip grip-close" onpointerdown="send('GRIP_TAP_CLOSE')">&#x270A;<span class="glbl">Close</span></div>
+    <div class="btn-grip grip-pick" onpointerdown="send('GRIP_TAP_PICK')">&#x1F4E6;<span class="glbl">Pick</span></div>
+  </div>
 
-<script>
-  const ESP32_IP = "192.168.4.1";
-  const connEl   = document.getElementById("conn");
-  let ws;
+  <script>
+    const ESP32_IP = "192.168.4.1";
+    const connEl = document.getElementById("conn");
+    let ws;
 
-  function connect() {
-    ws = new WebSocket("ws://" + ESP32_IP + "/ws");
-    ws.onopen    = () => { connEl.textContent = "● Connected";    connEl.className = "connected"; };
-    ws.onclose   = () => { connEl.textContent = "● Disconnected"; connEl.className = "disconnected"; setTimeout(connect, 2000); };
-    ws.onmessage = () => {};
-  }
-  connect();
+    function connect() {
+      ws = new WebSocket("ws://" + ESP32_IP + "/ws");
+      ws.onopen = () => { connEl.textContent = "● Connected"; connEl.className = "connected"; };
+      ws.onclose = () => { connEl.textContent = "● Disconnected"; connEl.className = "disconnected"; setTimeout(connect, 2000); };
+      ws.onmessage = () => { };
+    }
+    connect();
 
-  function send(cmd) {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
-  }
+    function send(cmd) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
+    }
 
-  function emergencyStop() {
-    send("ESTOP");
-    document.body.style.background = "#450a0a";
-    setTimeout(() => { document.body.style.background = "#0f1117"; }, 300);
-  }
+    function emergencyStop() {
+      send("ESTOP");
+      document.body.style.background = "#450a0a";
+      setTimeout(() => { document.body.style.background = "#0f1117"; }, 300);
+    }
 
-  const modes = {
-    MANUAL: { btn:"btn-manual", badge:"MANUAL MODE",     cls:"badge-manual", cmd:"MODE_MANUAL" },
-    AUTO:   { btn:"btn-auto",   badge:"AUTONOMOUS MODE", cls:"badge-auto",   cmd:"MODE_AUTO"   },
-    PICK:   { btn:"btn-pick",   badge:"AUTO PICK MODE",  cls:"badge-pick",   cmd:"MODE_PICK"   },
-  };
-  function setMode(mode) {
-    Object.keys(modes).forEach(k => document.getElementById(modes[k].btn).classList.remove("active"));
-    const m = modes[mode];
-    document.getElementById(m.btn).classList.add("active");
-    const badge = document.getElementById("mode-badge");
-    badge.textContent = m.badge;
-    badge.className   = "mode-badge " + m.cls;
-    send(m.cmd);
-  }
+    const modes = {
+      MANUAL: { btn: "btn-manual", badge: "MANUAL MODE", cls: "badge-manual", cmd: "MODE_MANUAL" },
+      AUTO: { btn: "btn-auto", badge: "AUTONOMOUS MODE", cls: "badge-auto", cmd: "MODE_AUTO" },
+      PICK: { btn: "btn-pick", badge: "AUTO PICK MODE", cls: "badge-pick", cmd: "MODE_PICK" },
+    };
+    function setMode(mode) {
+      Object.keys(modes).forEach(k => document.getElementById(modes[k].btn).classList.remove("active"));
+      const m = modes[mode];
+      document.getElementById(m.btn).classList.add("active");
+      const badge = document.getElementById("mode-badge");
+      badge.textContent = m.badge;
+      badge.className = "mode-badge " + m.cls;
+      send(m.cmd);
+    }
 
-  // ══════════════════════════════════════════════════════════
-  // SINGLE SEND LOGIC — applies to ALL hold buttons
-  // press  → sends command ONCE
-  // release → sends stop ONCE
-  // NO intervals, NO repeating, NO continuous sending
-  // ══════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════
+    // SINGLE SEND LOGIC — applies to ALL hold buttons
+    // press  → sends command ONCE
+    // release → sends stop ONCE
+    // NO intervals, NO repeating, NO continuous sending
+    // ══════════════════════════════════════════════════════════
 
-  function bindHoldButton(id, pressCmd, releaseCmd) {
-    const el = document.getElementById(id);
-    if (!el) return;
+    function bindHoldButton(id, pressCmd, releaseCmd) {
+      const el = document.getElementById(id);
+      if (!el) return;
 
-    el.addEventListener("pointerdown", e => {
-      e.preventDefault();
-      el.setPointerCapture(e.pointerId);
-      el.classList.add("active");
-      send(pressCmd);        // ← sends ONCE only
-    });
+      el.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        el.classList.add("active");
+        send(pressCmd);        // ← sends ONCE only
+      });
 
-    el.addEventListener("pointerup", () => {
-      el.classList.remove("active");
-      send(releaseCmd);      // ← sends ONCE only
-    });
+      el.addEventListener("pointerup", () => {
+        el.classList.remove("active");
+        send(releaseCmd);      // ← sends ONCE only
+      });
 
-    el.addEventListener("pointercancel", () => {
-      el.classList.remove("active");
-      send(releaseCmd);
-    });
-  }
+      el.addEventListener("pointercancel", () => {
+        el.classList.remove("active");
+        send(releaseCmd);
+      });
+    }
 
-  // Movement buttons — send move once, send STOP once on release
-  bindHoldButton("mv-fl", "FWD_LEFT",  "STOP");
-  bindHoldButton("mv-fw", "FWD",       "STOP");
-  bindHoldButton("mv-fr", "FWD_RIGHT", "STOP");
-  bindHoldButton("mv-ll", "LEFT",      "STOP");
-  bindHoldButton("mv-st", "STOP",      "STOP");
-  bindHoldButton("mv-rr", "RIGHT",     "STOP");
-  bindHoldButton("mv-bl", "BWD_LEFT",  "STOP");
-  bindHoldButton("mv-bw", "BWD",       "STOP");
-  bindHoldButton("mv-br", "BWD_RIGHT", "STOP");
+    // Movement buttons — send move once, send STOP once on release
+    bindHoldButton("mv-fl", "FWD_LEFT", "STOP");
+    bindHoldButton("mv-fw", "FWD", "STOP");
+    bindHoldButton("mv-fr", "FWD_RIGHT", "STOP");
+    bindHoldButton("mv-ll", "LEFT", "STOP");
+    bindHoldButton("mv-st", "STOP", "STOP");
+    bindHoldButton("mv-rr", "RIGHT", "STOP");
+    bindHoldButton("mv-bl", "BWD_LEFT", "STOP");
+    bindHoldButton("mv-bw", "BWD", "STOP");
+    bindHoldButton("mv-br", "BWD_RIGHT", "STOP");
 
-  // Rotation buttons
-  bindHoldButton("rot-l", "ROT_L", "STOP");
-  bindHoldButton("rot-r", "ROT_R", "STOP");
+    // Rotation buttons
+    bindHoldButton("rot-l", "ROT_L", "STOP");
+    bindHoldButton("rot-r", "ROT_R", "STOP");
 
-  // Joint buttons — send joint once, send ARM_STOP once on release
-  bindHoldButton("j1up", "J1_UP",   "ARM_STOP");
-  bindHoldButton("j1dn", "J1_DOWN", "ARM_STOP");
-  bindHoldButton("j2up", "J2_UP",   "ARM_STOP");
-  bindHoldButton("j2dn", "J2_DOWN", "ARM_STOP");
-  bindHoldButton("j3up", "J3_UP",   "ARM_STOP");
-  bindHoldButton("j3dn", "J3_DOWN", "ARM_STOP");
+    // Joint buttons — send joint once, send ARM_STOP once on release
+    bindHoldButton("j1up", "J1_UP", "ARM_STOP");
+    bindHoldButton("j1dn", "J1_DOWN", "ARM_STOP");
+    bindHoldButton("j2up", "J2_UP", "ARM_STOP");
+    bindHoldButton("j2dn", "J2_DOWN", "ARM_STOP");
+    bindHoldButton("j3up", "J3_UP", "ARM_STOP");
+    bindHoldButton("j3dn", "J3_DOWN", "ARM_STOP");
+    bindHoldButton("gripup", "GRIP_OPEN", "ARM_STOP");
+    bindHoldButton("gripdn", "GRIP_CLOSE", "ARM_STOP");
 
-</script>
+  </script>
 </body>
+
 </html>

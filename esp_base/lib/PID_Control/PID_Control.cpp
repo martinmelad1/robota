@@ -9,23 +9,23 @@ extern QueueHandle_t pidMailbox;
 // ==========================================
 
 // Front Left (FL) — L298N Channel A
-const int PWM_FL   = 32;  // ENA
-const int DIR_A_FL = 25;  // IN1
-const int DIR_B_FL = 26;  // IN2
-const int ENC_A_FL = 34;  // Encoder A (input-only GPIO — no internal pull resistor)
+const int PWM_FL   = 12;  // ENA
+const int DIR_A_FL = 14;  // IN1
+const int DIR_B_FL = 25;  // IN2
+const int ENC_A_FL = 36;  // Encoder A (input-only GPIO — no internal pull resistor)
 const int ENC_B_FL = 35;  // Encoder B (input-only GPIO — no internal pull resistor)
 
 // Front Right (FR) — L298N Channel B
-const int PWM_FR   = 33;  // ENB
-const int DIR_A_FR = 14;  // IN3
+const int PWM_FR   = 26;  // ENB
+const int DIR_A_FR = 32;  // IN3
 const int DIR_B_FR = 27;  // IN4
-const int ENC_A_FR = 36;  // Encoder A (input-only GPIO — no internal pull resistor)
+const int ENC_A_FR = 34;  // Encoder A (input-only GPIO — no internal pull resistor)
 const int ENC_B_FR = 39;  // Encoder B (input-only GPIO — no internal pull resistor)
 
 // Rear Left (RL) — L298N Channel A
-const int PWM_RL   = 12;  // ENA
-const int DIR_A_RL = 15;  // IN1
-const int DIR_B_RL = 13;  // IN2
+const int PWM_RL   = 33;  // ENA
+const int DIR_A_RL = 13;  // IN1
+const int DIR_B_RL = 15;  // IN2
 const int ENC_A_RL = 18;  // Encoder A
 const int ENC_B_RL = 19;  // Encoder B
 
@@ -75,22 +75,25 @@ void IRAM_ATTR isrRR_B() { portENTER_CRITICAL_ISR(&tickMux); ticksRR++; portEXIT
 // ==========================================
 // 3. PID VARIABLES & SETUP
 // ==========================================
+// ==========================================
+// 3. PID VARIABLES & SETUP (COMMENTED OUT FOR PURE OPEN-LOOP)
+// ==========================================
 // The target speeds (Setpoints)
-double setFL = 0, setFR = 0, setRL = 0, setRR = 0;
+// double setFL = 0, setFR = 0, setRL = 0, setRR = 0;
 // The actual speeds (Inputs)
-double inFL = 0, inFR = 0, inRL = 0, inRR = 0;
+double inFL = 0, inFR = 0, inRL = 0, inRR = 0; // Keeping these for GUI feedback
 // The PWM outputs calculated by PID
-double outFL = 0, outFR = 0, outRL = 0, outRR = 0;
+// double outFL = 0, outFR = 0, outRL = 0, outRR = 0;
 
 // TUNING VALUES: Change these during your tuning phase
-double Kp = 4.5;
-double Ki = 0.4;
-double Kd = 0.39;
+// double Kp = 4.5;
+// double Ki = 0.4;
+// double Kd = 0.39;
 
-PID pidFL(&inFL, &outFL, &setFL, Kp, Ki, Kd, DIRECT);
-PID pidFR(&inFR, &outFR, &setFR, Kp, Ki, Kd, DIRECT);
-PID pidRL(&inRL, &outRL, &setRL, Kp, Ki, Kd, DIRECT);
-PID pidRR(&inRR, &outRR, &setRR, Kp, Ki, Kd, DIRECT);
+// PID pidFL(&inFL, &outFL, &setFL, Kp, Ki, Kd, DIRECT);
+// PID pidFR(&inFR, &outFR, &setFR, Kp, Ki, Kd, DIRECT);
+// PID pidRL(&inRL, &outRL, &setRL, Kp, Ki, Kd, DIRECT);
+// PID pidRR(&inRR, &outRR, &setRR, Kp, Ki, Kd, DIRECT);
 
 unsigned long lastTime = 0;
 
@@ -148,11 +151,11 @@ void PID_Init()
   pinMode(ENC_A_RR, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_A_RR), isrRR_A, RISING);
   pinMode(ENC_B_RR, INPUT_PULLUP); attachInterrupt(digitalPinToInterrupt(ENC_B_RR), isrRR_B, RISING);
 
-  // Setup PID
-  pidFL.SetMode(AUTOMATIC); pidFL.SetOutputLimits(0, 255); pidFL.SetSampleTime(50);
-  pidFR.SetMode(AUTOMATIC); pidFR.SetOutputLimits(0, 255); pidFR.SetSampleTime(50);
-  pidRL.SetMode(AUTOMATIC); pidRL.SetOutputLimits(0, 255); pidRL.SetSampleTime(50);
-  pidRR.SetMode(AUTOMATIC); pidRR.SetOutputLimits(0, 255); pidRR.SetSampleTime(50);
+  // Setup PID (COMMENTED OUT)
+  // pidFL.SetMode(AUTOMATIC); pidFL.SetOutputLimits(0, 255); pidFL.SetSampleTime(50);
+  // pidFR.SetMode(AUTOMATIC); pidFR.SetOutputLimits(0, 255); pidFR.SetSampleTime(50);
+  // pidRL.SetMode(AUTOMATIC); pidRL.SetOutputLimits(0, 255); pidRL.SetSampleTime(50);
+  // pidRR.SetMode(AUTOMATIC); pidRR.SetOutputLimits(0, 255); pidRR.SetSampleTime(50);
 }
 
 void PID_Compute(float Vx, float Vy, float Wz)
@@ -182,26 +185,32 @@ void PID_Compute(float Vx, float Vy, float Wz)
     inFL = snapFL; inFR = snapFR; inRL = snapRL; inRR = snapRR;
     lastTime = millis();
 
-    // Pass absolute target to PID
-    setFL = abs(targetFL);
-    setFR = abs(targetFR);
-    setRL = abs(targetRL);
-    setRR = abs(targetRR);
+    // Pass absolute target to PID (COMMENTED OUT)
+    // setFL = abs(targetFL);
+    // setFR = abs(targetFR);
+    // setRL = abs(targetRL);
+    // setRR = abs(targetRR);
 
     // Reset integral when motor is commanded to stop (prevents windup jerk on restart)
-    auto resetPID = [](PID& pid, double& out, double set) {
-      if (set == 0.0) { pid.SetMode(MANUAL); out = 0; pid.SetMode(AUTOMATIC); }
-    };
-    resetPID(pidFL, outFL, setFL);
-    resetPID(pidFR, outFR, setFR);
-    resetPID(pidRL, outRL, setRL);
-    resetPID(pidRR, outRR, setRR);
+    // auto resetPID = [](PID& pid, double& out, double set) {
+    //   if (set == 0.0) { pid.SetMode(MANUAL); out = 0; pid.SetMode(AUTOMATIC); }
+    // };
+    // resetPID(pidFL, outFL, setFL);
+    // resetPID(pidFR, outFR, setFR);
+    // resetPID(pidRL, outRL, setRL);
+    // resetPID(pidRR, outRR, setRR);
 
-    // Compute PWM Output
-    pidFL.Compute();
-    pidFR.Compute();
-    pidRL.Compute();
-    pidRR.Compute();
+    // Compute PWM Output (COMMENTED OUT)
+    // pidFL.Compute();
+    // pidFR.Compute();
+    // pidRL.Compute();
+    // pidRR.Compute();
+
+    // Pure Open-Loop PWM Assignment
+    double outFL = abs(targetFL) > 0.1 ? 255.0 : 0.0;
+    double outFR = abs(targetFR) > 0.1 ? 255.0 : 0.0;
+    double outRL = abs(targetRL) > 0.1 ? 255.0 : 0.0;
+    double outRR = abs(targetRR) > 0.1 ? 255.0 : 0.0;
 
     // ==========================================
     // STEP 3: DRIVE MOTORS

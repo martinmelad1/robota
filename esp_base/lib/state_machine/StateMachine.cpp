@@ -157,19 +157,25 @@ void MasterStateMachine::update() {
       arm_motion.joint_id = 3;
       arm_motion.direction = ArmDir::DOWN;
       isArmCmd = true;
+    } else if (cmdStr == "GRIP_TAP_OPEN") {
+      arm_motion.joint_id = 6;
+      arm_motion.direction = ArmDir::UP; // Mapped to 0 in UART_Master
+      isArmCmd = true;
+    } else if (cmdStr == "GRIP_TAP_CLOSE") {
+      arm_motion.joint_id = 6;
+      arm_motion.direction = ArmDir::DOWN; // Mapped to 1 in UART_Master
+      isArmCmd = true;
+    } else if (cmdStr == "GRIP_TAP_PICK" || cmdStr == "GRIP_PICK") { // Kept GRIP_PICK for auto pick mapping
+      arm_motion.joint_id = 6;
+      arm_motion.direction = ArmDir::STOP; // Pick command mapping
+      isArmCmd = true;
     } else if (cmdStr == "GRIP_OPEN") {
       arm_motion.joint_id = 5;
-      arm_motion.direction = ArmDir::UP; // Mapped to 0 in UART_Master
+      arm_motion.direction = ArmDir::UP; 
       isArmCmd = true;
     } else if (cmdStr == "GRIP_CLOSE") {
       arm_motion.joint_id = 5;
-      arm_motion.direction = ArmDir::DOWN; // Mapped to 1 in UART_Master
-      isArmCmd = true;
-    } else if (cmdStr == "GRIP_PICK") {
-      arm_motion.joint_id = 5;
-      arm_motion.direction =
-          ArmDir::STOP; // I mapped the STOP enum purely as a placeholder
-                        // integer to trigger PICK!
+      arm_motion.direction = ArmDir::DOWN; 
       isArmCmd = true;
     } else if (cmdStr == "ARM_STOP") {
       arm_motion.joint_id = 0;
@@ -265,7 +271,7 @@ void MasterStateMachine::update() {
     // We execute the ARM PICK motion immediately and transition to a wait state
     Serial.println("Executing Arm PICK Action...");
     ArmMotion pick_motion;
-    pick_motion.joint_id = 5;             // Gripper
+    pick_motion.joint_id = 6;             // Gripper (Virtual instant joint)
     pick_motion.direction = ArmDir::STOP; // Pick command mapping
     xQueueOverwrite(armMailbox, &pick_motion);
     

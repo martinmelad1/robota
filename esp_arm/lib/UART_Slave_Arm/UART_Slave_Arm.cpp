@@ -56,7 +56,7 @@ void processArmCommand(char *cmd) {
 
     else if (strncmp(cmd, "GRIP:", 5) == 0) {
         ServoCommand sc;
-        sc.joint_id = 5;
+        sc.joint_id = 6;
         
         if (strncmp(cmd + 5, "OPEN", 4) == 0) {
             sc.direction = 1;
