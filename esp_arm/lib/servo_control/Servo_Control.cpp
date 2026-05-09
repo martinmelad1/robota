@@ -11,7 +11,7 @@ Servo servoGrip; // Gripper servo
 // Initial angles (start at 90 degrees)
 int angle1 = 90;
 int angle2 = 50;
-int angle3 = 0;
+int angle3 = 130;
 int angleGrip = GRIP_ANGLE_OPEN;
 
 // Variables to keep track of current continuous movement

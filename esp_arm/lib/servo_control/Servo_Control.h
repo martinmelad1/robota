@@ -22,7 +22,7 @@
 #define SERVO_MAX_ANGLE_GRIPPER 150
 // Gripper Fixed Angles
 #define GRIP_ANGLE_OPEN  60
-#define GRIP_ANGLE_CLOSE 120
+#define GRIP_ANGLE_CLOSE 180
 #define GRIP_ANGLE_PICK  90
 
 // Structure to hold servo commands

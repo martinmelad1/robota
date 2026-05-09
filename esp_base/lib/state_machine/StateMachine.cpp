@@ -125,10 +125,10 @@ void MasterStateMachine::update() {
       base_motion.move_type = DriveCommand::CMD_BWD_R;
       isChassisCmd = true;
     } else if (cmdStr == "ROT_L") {
-      base_motion.move_type = DriveCommand::CMD_ROT_L;
+      base_motion.move_type = DriveCommand::CMD_ROT_R;
       isChassisCmd = true;
     } else if (cmdStr == "ROT_R") {
-      base_motion.move_type = DriveCommand::CMD_ROT_R;
+      base_motion.move_type = DriveCommand::CMD_ROT_L;
       isChassisCmd = true;
     } else if (cmdStr == "STOP") {
       base_motion.move_type = DriveCommand::CMD_STOP;
@@ -143,19 +143,19 @@ void MasterStateMachine::update() {
       isArmCmd = true;
     } else if (cmdStr == "J2_UP") {
       arm_motion.joint_id = 2;
-      arm_motion.direction = ArmDir::DOWN;
+      arm_motion.direction = ArmDir::UP;
       isArmCmd = true;
     } else if (cmdStr == "J2_DOWN") {
       arm_motion.joint_id = 2;
-      arm_motion.direction = ArmDir::UP;
+      arm_motion.direction = ArmDir::DOWN;
       isArmCmd = true;
     } else if (cmdStr == "J3_UP") {
       arm_motion.joint_id = 3;
-      arm_motion.direction = ArmDir::UP;
+      arm_motion.direction = ArmDir::DOWN;
       isArmCmd = true;
     } else if (cmdStr == "J3_DOWN") {
       arm_motion.joint_id = 3;
-      arm_motion.direction = ArmDir::DOWN;
+      arm_motion.direction = ArmDir::UP;
       isArmCmd = true;
     } else if (cmdStr == "GRIP_TAP_OPEN") {
       arm_motion.joint_id = 6;
