@@ -5,6 +5,7 @@
 
 extern QueueHandle_t guiMailbox;
 extern QueueHandle_t pidMailbox;
+extern QueueHandle_t armMailbox;
 
 // Physical Arena Tracking  
 struct FieldBox { String expectedQR; String targetColor; float expectedX; float expectedY; bool isPickedUp; };
@@ -27,13 +28,18 @@ enum class DriveCommand {
     CMD_STOP,
     CMD_FWD, CMD_BWD, CMD_LEFT, CMD_RIGHT,
     CMD_FWD_L, CMD_FWD_R, CMD_BWD_L, CMD_BWD_R,
-    CMD_ROT_L, CMD_ROT_R
+    CMD_ROT_L, CMD_ROT_R,
+    CMD_DIRECT  // Raw Vx/Vy/Wz from PathPlanner — bypasses direction switch
 };
 
 struct ChassisMotion {
-    DriveCommand move_type; 
-    float speed;            
-    float omega;     
+    DriveCommand move_type;
+    float speed;        // used by direction commands (m/s)
+    float omega;        // used by rotation commands (rad/s)
+    // Direct holonomic velocity — used only with CMD_DIRECT
+    float Vx = 0.0f;   // lateral  [-1, 1] normalised
+    float Vy = 0.0f;   // forward  [-1, 1] normalised
+    float Wz = 0.0f;   // rotation [-1, 1] normalised
 };
 
 enum class GripperStatus {

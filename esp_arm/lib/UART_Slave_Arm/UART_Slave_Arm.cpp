@@ -113,21 +113,33 @@ void UART_Arm_Task(void *arg) {
     uint8_t data[BUF_SIZE];
     char line[128];
     int idx = 0;
+    int fb_counter = 0;
 
     while (1) {
         int len = uart_read_bytes(UART_PORT, data, BUF_SIZE, 20 / portTICK_PERIOD_MS);
 
-        for (int i = 0; i < len; i++) {
-            char c = (char)data[i];
+        if (len > 0) {
+            for (int i = 0; i < len; i++) {
+                char c = (char)data[i];
 
-            if (c == '\n') {
-                line[idx] = '\0';
-                processArmCommand(line);
-                idx = 0;
-            } else {
-                if (idx < sizeof(line) - 1)
-                    line[idx++] = c;
+                if (c == '\n') {
+                    line[idx] = '\0';
+                    processArmCommand(line);
+                    idx = 0;
+                } else {
+                    if (idx < sizeof(line) - 1)
+                        line[idx++] = c;
+                }
             }
+        }
+
+        // Send joint feedback every ~100ms (5 ticks of 20ms)
+        if (++fb_counter >= 5) {
+            fb_counter = 0;
+            char fb_msg[64];
+            // Format must match what esp_base expects: JOINT_FB:j1,j2,j3
+            snprintf(fb_msg, sizeof(fb_msg), "JOINT_FB:%d.0,%d.0,%d.0\n", angle1, angle2, angle3);
+            uart_write_bytes(UART_PORT, fb_msg, strlen(fb_msg));
         }
     }
 }

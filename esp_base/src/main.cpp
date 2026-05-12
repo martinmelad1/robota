@@ -2,6 +2,7 @@
 #include "WorldState.h"
 #include "UART_Master.h"
 #include "PID_Control.h"
+#include "Odometry.h"
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <LittleFS.h>
@@ -52,6 +53,18 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 // FreeRTOS TASKS
 
 void setupTasks() {
+  // Odometry runs at 100 Hz on Core 1 — must start before Brain
+  xTaskCreatePinnedToCore(
+      [](void *pvParameters) {
+        Odometry_Init();        // calibrates IMU, ~1 s still
+        Odometry_ResetPose();   // zero the world-frame origin
+        while (true) {
+          Odometry_Update();
+          vTaskDelay(10 / portTICK_PERIOD_MS); // 100 Hz
+        }
+      },
+      "OdoTask", 4096, NULL, 3 /*BUG3 FIX: higher priority than BrainTask*/, NULL, 1);
+
   // Master State Machine logic runs continuously
   xTaskCreatePinnedToCore(
       [](void *pvParameters) {

@@ -124,7 +124,22 @@ void ARM_MoveJoint(int joint_id, int dir)
 {
     char cmd[64];
     sprintf(cmd, "JOINT:%d,%d\n", joint_id, dir);
+    uart_write_bytes(UART_ARM, cmd, strlen(cmd));
+    printf("Sent to ARM: %s", cmd);
+}
 
+void ARM_SendColor(const char* color)
+{
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "COLOR:%s\n", color);
+    uart_write_bytes(UART_ARM, cmd, strlen(cmd));
+    printf("Sent to ARM: %s", cmd);
+}
+
+void ARM_SendReached(const char* color)
+{
+    char cmd[64];
+    snprintf(cmd, sizeof(cmd), "REACHED:%s\n", color);
     uart_write_bytes(UART_ARM, cmd, strlen(cmd));
     printf("Sent to ARM: %s", cmd);
 }
@@ -134,6 +149,11 @@ char cam_ip_address[20] = "192.168.4.2"; // Default fallback
 
 // Global ultrasonic distance — updated when cam sends DIST:xx.xx
 volatile float ultrasonic_distance_cm = -1.0f;
+
+// Global arm joint angles — updated when arm sends JOINT_FB:j1,j2,j3
+volatile float arm_j1_deg = 0.0f;
+volatile float arm_j2_deg = 0.0f;
+volatile float arm_j3_deg = 0.0f;
 
 // ========================
 // CAMERA TASK
@@ -241,9 +261,17 @@ void UART_Arm_Task(void *arg)
             if (hasPrintable) {
                 printf("ARM -> BASE: %s\n", data);
 
-                // 🔥 TODO: Parse ARM feedback
-                // Example:
-                // if (strstr((char*)data, "BOX_PICKED")) { ... }
+                // Parse joint angle feedback: "JOINT_FB:j1,j2,j3"
+                char* jfbPtr = strstr((char*)data, "JOINT_FB:");
+                if (jfbPtr != NULL) {
+                    float j1 = 0, j2 = 0, j3 = 0;
+                    if (sscanf(jfbPtr + 9, "%f,%f,%f", &j1, &j2, &j3) == 3) {
+                        arm_j1_deg = j1;
+                        arm_j2_deg = j2;
+                        arm_j3_deg = j3;
+                        printf("ARM joints updated: J1=%.1f J2=%.1f J3=%.1f\n", j1, j2, j3);
+                    }
+                }
             }
         }
 

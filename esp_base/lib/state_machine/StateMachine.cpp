@@ -1,6 +1,8 @@
 #include "StateMachine.h"
 #include "PID_Control.h"
 #include "UART_Master.h"
+#include "PathPlanner.h"
+#include "Odometry.h"
 
 extern QueueHandle_t guiMailbox;
 extern QueueHandle_t pidMailbox;
@@ -9,6 +11,9 @@ extern HardwareSerial CAM_UART;
 extern HardwareSerial ARM_UART;
 extern char cam_ip_address[20];
 extern volatile float ultrasonic_distance_cm;
+extern volatile float arm_j1_deg;
+extern volatile float arm_j2_deg;
+extern volatile float arm_j3_deg;
 
 // Memory Arrays
 FieldBox field_boxes[TOTAL_TARGETS] = {{"QR_1", "red", 0.0, 0.0, false},
@@ -34,6 +39,9 @@ String MasterStateMachine::getTelemetryJSON() {
   double fl = 0, fr = 0, rl = 0, rr = 0;
   PID_GetActualSpeeds(&fl, &fr, &rl, &rr);
 
+  // Live odometry pose
+  Pose p = Odometry_GetPose();
+
   // Determine pick status for dashboard camera feed
   String pickStatus = "idle";
   if (currentState == RobotState::START_PICK_SEQUENCE || currentState == RobotState::WAIT_FOR_VISION_QR) {
@@ -48,10 +56,15 @@ String MasterStateMachine::getTelemetryJSON() {
   json += "\"pick_status\":\"" + pickStatus + "\",";
   json += "\"pick_color\":\"" + foundColor + "\",";
   json += "\"cam_ip\":\"" + String(cam_ip_address) + "\",";
-  json += "\"px\":0.0, \"py\":0.0, \"hdg\":0.0,";
+  // Real odometry — no more hardcoded zeros
+  json += "\"px\":" + String(p.x, 3) + ", \"py\":" + String(p.y, 3) +
+          ", \"hdg\":" + String(p.theta * 180.0f / M_PI, 1) + ",";
   json += "\"fl\":" + String(fl) + ", \"fr\":" + String(fr) +
           ", \"rl\":" + String(rl) + ", \"rr\":" + String(rr) + ",";
-  json += "\"j1\":0.0, \"j2\":0.0, \"j3\":0.0,";
+  // Real arm joint angles received via UART from esp_arm
+  json += "\"j1\":" + String(arm_j1_deg, 1) +
+          ", \"j2\":" + String(arm_j2_deg, 1) +
+          ", \"j3\":" + String(arm_j3_deg, 1) + ",";
   json += "\"grip\":1,";
   json += "\"dist\":" + String(ultrasonic_distance_cm, 2);
   json += "}";
@@ -70,8 +83,8 @@ void MasterStateMachine::update() {
     GUITrigger mode_trigger = GUITrigger::NONE;
     ChassisMotion base_motion;
     base_motion.move_type = DriveCommand::CMD_STOP;
-    base_motion.speed = 0.5;
-    base_motion.omega = 1.5708;
+    base_motion.speed = 0.5;  // Balanced speed with stiction kick
+    base_motion.omega = 1.5;  // Adjusted manual rotation speed
 
     ArmMotion arm_motion;
     arm_motion.joint_id = 0;
@@ -125,10 +138,10 @@ void MasterStateMachine::update() {
       base_motion.move_type = DriveCommand::CMD_BWD_R;
       isChassisCmd = true;
     } else if (cmdStr == "ROT_L") {
-      base_motion.move_type = DriveCommand::CMD_ROT_R;
+      base_motion.move_type = DriveCommand::CMD_ROT_R;  // Hardware-compensated: motor wiring inverts rotation
       isChassisCmd = true;
     } else if (cmdStr == "ROT_R") {
-      base_motion.move_type = DriveCommand::CMD_ROT_L;
+      base_motion.move_type = DriveCommand::CMD_ROT_L;  // Hardware-compensated: motor wiring inverts rotation
       isChassisCmd = true;
     } else if (cmdStr == "STOP") {
       base_motion.move_type = DriveCommand::CMD_STOP;
@@ -309,15 +322,55 @@ void MasterStateMachine::update() {
   }
 
   case RobotState::START_AUTO_DROP_SEQUENCE:
-    Serial.println("SKELETON: Navigating to Drop Zone...");
-    // Path Planner Integration Goes Here
+    Serial.println("AUTO: Capturing start pose and initialising Path Planner...");
+    // 1. Tell arm which cube colour is being placed ("COLOR:red\n")
+    ARM_SendColor(foundColor.c_str());
+    // 2. Set the planner to navigate only to the matching station
+    PathPlanner_SetGoalByColor(foundColor);
+    // 3. Capture pose FIRST — all goal offsets are relative to HERE
+    PathPlanner_CaptureStartPose();
+    PathPlanner_Reset();
     currentState = RobotState::NAVIGATING_TO_DROP;
     break;
 
-  case RobotState::NAVIGATING_TO_DROP:
-  case RobotState::WAIT_FOR_VISION_COLOR:
-  case RobotState::WAIT_FOR_ARM_DROP:
-    // SKELETON: Implement Look-Move-Look and Drop logic later
+  case RobotState::NAVIGATING_TO_DROP: {
+    if (PathPlanner_Update()) {
+      // Arrived at the target station — tell the arm to place the cube
+      // Send "REACHED:<color>" so the arm knows which station we're at
+      ARM_SendReached(foundColor.c_str());
+
+      ArmMotion place_motion;
+      place_motion.joint_id = 6;             // Gripper virtual joint
+      place_motion.direction = ArmDir::STOP; // GRIP:PICK command
+      xQueueOverwrite(armMailbox, &place_motion);
+
+      Serial.println("AUTO: At goal. Commanding arm. Waiting for placement...");
+      stateTimer = millis();
+      currentState = RobotState::WAIT_FOR_ARM_DROP;
+    }
     break;
   }
+
+  case RobotState::WAIT_FOR_VISION_COLOR:
+    // Reserved for future Look-Move-Look colour detection
+    break;
+
+  case RobotState::WAIT_FOR_ARM_DROP: {
+    // Wait 5 seconds for the arm to complete the drop action.
+    // (No UART feedback needed — timer is the "done" signal for now.)
+    if (millis() - stateTimer > 5000) {
+      PathPlanner_AdvanceGoal();
+
+      if (PathPlanner_IsComplete()) {
+        // All goals visited — sequence finished
+        Serial.println("AUTO: All goals complete. Returning to Manual.");
+        currentModeStr = "MANUAL";
+        currentState = RobotState::MANUAL_MODE;
+      } else {
+        // More goals remain — go back to drive the next one
+        currentState = RobotState::NAVIGATING_TO_DROP;
+      }
+    }
+    break;
+  }}
 }

@@ -34,6 +34,11 @@ struct ServoCommand {
 // Mailbox queue handle
 extern QueueHandle_t servoMailbox;
 
+// Current angles
+extern int angle1;
+extern int angle2;
+extern int angle3;
+
 // Initialization function
 void Servo_Control_Init();
 
