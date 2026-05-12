@@ -10,8 +10,6 @@ const int   TICKS_PER_REV = 1496;   // Quadrature (4x) mode got it from  (datash
 const int   MAX_PWM       = 200;    // max PWM out of 255 — lower = safer during testing
 
 // =============================================================
-//  COMPETITION TARGET POSITIONS (from your image)
-//  All in metres. Origin (0,0) is where you leave the controller.
 //  X positive = right, X negative = left
 //  Y positive = forward, Y negative = backward
 // =============================================================
