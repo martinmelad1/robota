@@ -1,248 +1,227 @@
 // ============================================================
-//  PATH_PLANNER.CPP — Position-based autonomous navigation
+//  PATH_PLANNER.CPP — Segment-based autonomous path
 //
-//  Uses Odometry_GetPose() to read real (x, y, θ) and drives
-//  the chassis with a proportional position controller until
-//  the robot is within POSITION_TOLERANCE of each goal.
+//  Field path (RED → BLUE → GREEN):
 //
-//  Coordinate frame (matches odometry):
-//    +X = right,  +Y = forward,  0° = heading at reset
+//    Seg  Type      Direction       Dist    Action
+//    ─────────────────────────────────────────────────────
+//    0    MOVE      Forward         0.60 m  —
+//    1    ROTATE    CCW / Left      90°     —
+//    2    MOVE      Forward         1.00 m  DROP RED
+//    3    MOVE      Right (strafe)  1.40 m  DROP BLUE
+//    4    ROTATE    CW  / Right     180°    —
+//    5    MOVE      Forward         1.30 m  —
+//    6    MOVE      Fwd+Right 45°   1.10 m  DROP GREEN
+//    7    MOVE      Forward         0.01 m  — (stop marker)
 //
-//  All goal coordinates are expressed in world-frame metres,
-//  RELATIVE TO THE POSE AT THE MOMENT MODE_AUTO WAS PRESSED
-//  (captured by PathPlanner_CaptureStartPose).  This means:
-//    • If robot is already at the origin → targets match exactly.
-//    • If robot drove somewhere first → targets offset correctly.
+//  Robot-local frame:
+//    Vy = +1 → forward   Vx = +1 → strafe right   Wz = +1 → CCW/left
+//
+//  Distance tracking uses world-frame odometry displacement from the
+//  start of each segment, so it is heading-independent.
+//  Rotation tracking uses |Δθ| from segment start, wrapping-safe.
+//
+//  ⚠ Tuning:
+//    Adjust POS_TOL upward if the robot coasts past target.
+//    Adjust ROT_TOL upward if the robot keeps rotating past target angle.
+//    MOVE_SPEED / ROT_SPEED only affect the sign (open-loop = full PWM).
 // ============================================================
 
 #include "PathPlanner.h"
 #include "Odometry.h"
+#include "WorldState.h"
 #include <Arduino.h>
 #include <math.h>
 
 extern QueueHandle_t pidMailbox;
 
 // ── Tuning constants ─────────────────────────────────────────
-// Kp_pos   : proportional gain — increase if robot is sluggish, decrease if it oscillates
-// MAX_SPEED : maximum normalised motor speed [0.0, 1.0] sent to PID_Compute
-// MIN_SPEED : minimum speed to overcome friction (deadband)
-// TOLERANCE : arrival radius in metres
-static constexpr float Kp_pos            = 1.2f;
-static constexpr float MAX_SPEED         = 0.55f;  // 55 % of full PWM — transit speed
-static constexpr float MIN_SPEED         = 0.20f;  // kept for reference; no longer snapped near target
-static constexpr float POSITION_TOLERANCE = 0.09f; // 9 cm — large enough to absorb full-speed glide
-static constexpr float Kp_theta          = 1.5f;   // heading correction gain
+static constexpr float MOVE_SPEED = 0.50f;   // passed to CMD_DIRECT (open-loop → direction only)
+static constexpr float ROT_SPEED  = 0.35f;   // rotation speed (open-loop)
+static constexpr float POS_TOL    = 0.06f;   // arrival radius (m) — increase if robot overshoots
+static constexpr float ROT_TOL    = 0.09f;   // heading tolerance (rad) ≈ 5° — increase if overshoots
 
-// ── Goal table ───────────────────────────────────────────────
-// Coordinates are RELATIVE to the autonomous start snapshot.
-// X positive = right, X negative = left
-// Y positive = forward, Y negative = backward
-//
-// Adjust to match your competition field layout.
-struct Goal {
-    float       x;      // target X offset from autonomous-start (metres)
-    float       y;      // target Y offset from autonomous-start (metres)
-    const char* label;  // debug name
+// ── Segment type ─────────────────────────────────────────────
+enum class SegType { MOVE, ROTATE };
+
+struct PathSeg {
+    SegType     type;
+    float       Vx, Vy;    // MOVE: robot-frame unit direction (one of them is 0 or 0.707)
+    float       Wz;        // ROTATE: +1 = CCW (left), -1 = CW (right)
+    float       dist;      // MOVE: metres | ROTATE: radians (positive)
+    DropAction  action;    // action to signal when this segment completes
+    const char* label;     // debug name
 };
 
-// Competition map (all relative to autonomous start = (0,0)):
-//   RED   (-1.0,  0.0) — pure X strafe left
-//   GREEN (-1.0, -1.0) — diagonal X+Y to green station
-//   BLUE  (-0.7, -0.7) — diagonal to blue station
-static const Goal goals[] = {
-    { -1.0f,  0.0f, "RED"   },
-    { -1.0f, -1.0f, "GREEN" },
-    { -0.7f, -0.7f, "BLUE"  },
+static const float RAD90  = float(M_PI) / 2.0f;
+static const float RAD180 = float(M_PI);
+
+// ── HARDCODED FIELD PATH ──────────────────────────────────────
+// All distances in metres. Adjust to match actual field measurements.
+// Diagonal direction: Vx=Vy=0.707 gives true 45° FWD+RIGHT.
+// ROT_CW_180 direction: -1 = clockwise. Flip to +1 if robot turns wrong way.
+static const PathSeg PATH[] = {
+    //  type               Vx      Vy       Wz    dist    action               label
+    { SegType::MOVE,   0.0f,  1.0f,   0.0f, 0.60f, DropAction::NONE,      "INIT_FWD"   },
+    { SegType::ROTATE, 0.0f,  0.0f,  +1.0f, RAD90, DropAction::NONE,      "ROT_L_90"   },
+    { SegType::MOVE,   0.0f,  1.0f,   0.0f, 1.00f, DropAction::DROP_RED,  "TO_RED"     },
+    { SegType::MOVE,  +1.0f,  0.0f,   0.0f, 1.40f, DropAction::DROP_BLUE, "TO_BLUE"    },
+    { SegType::ROTATE, 0.0f,  0.0f,  -1.0f, RAD180,DropAction::NONE,      "ROT_CW_180" },
+    { SegType::MOVE,   0.0f,  1.0f,   0.0f, 1.30f, DropAction::NONE,      "TO_GREEN_A" },
+    { SegType::MOVE,  +0.707f,0.707f, 0.0f, 1.10f, DropAction::DROP_GREEN,"TO_GREEN_B" },
+    { SegType::MOVE,   0.0f,  1.0f,   0.0f, 0.01f, DropAction::NONE,      "STOP_PT"    },
 };
-static const int NUM_GOALS = sizeof(goals) / sizeof(goals[0]);
+static const int PATH_LEN = (int)(sizeof(PATH) / sizeof(PATH[0]));
 
-// Active goal set — normally all 3, but SetGoalByColor sets just 1.
-static Goal  activeGoals[3];
-static int   activeNumGoals = NUM_GOALS;
+// ── Module state ──────────────────────────────────────────────
+static int        g_seg           = 0;
+static bool       g_segStarted    = false;
+static float      g_startX        = 0.0f;
+static float      g_startY        = 0.0f;
+static float      g_startTheta    = 0.0f;
+static DropAction g_pendingAction = DropAction::NONE;
+static bool       g_waitingAck    = false;
+static int        g_dbgCtr        = 0;
 
-// ── Module state ─────────────────────────────────────────────
-static int   currentGoal   = 0;
-static bool  goalAnnounced = false;  // for one-shot serial print
-static int   dbg_ctr       = 0;      // BUG5 FIX: module-scope so Reset() can clear it
-
-// Pose snapshot taken when MODE_AUTO is pressed
-static Pose  startPose = {0.0f, 0.0f, 0.0f};
-
-// ── Helpers ──────────────────────────────────────────────────
-
-// Apply deadband + max-clamp to a normalised speed value.
-// LATENCY3 FIX: MIN_SPEED snap removed — it forced full blast even on close approach,
-// causing overshoot oscillation. The motor deadband (8/255 in driveMotor) handles
-// signals too small for the motor to act on.
-static float _clampSpeed(float v) {
-    if (fabsf(v) < 0.01f) return 0.0f;      // pure zero deadband
-    if (fabsf(v) > MAX_SPEED)                // cap at maximum
-        v = (v > 0.0f) ? MAX_SPEED : -MAX_SPEED;
-    return v;
+// ── Private helpers ───────────────────────────────────────────
+static void _stop() {
+    ChassisMotion s;
+    s.move_type = DriveCommand::CMD_STOP;
+    s.Vx = s.Vy = s.Wz = 0.0f;
+    xQueueOverwrite(pidMailbox, &s);
 }
 
-// Push a ChassisMotion to the PID mailbox
-static void _sendMotion(float Vx, float Vy, float Wz) {
-    // PID_Compute expects Vx/Vy/Wz in units of speedToTicks(m/s).
-    // Here we pass normalised [-1, 1] fractions that PID_TaskCode
-    // converts via speedToTicks(motion.speed).  Instead we bypass
-    // the speed field and directly pass Vx/Vy as the "speed" channels
-    // by using CMD_STOP with custom fields — actually the cleanest path
-    // is to extend ChassisMotion with direct Vx/Vy/Wz.
-    //
-    // Since PID_Control is open-loop and scales by 255, we can pass
-    // our desired [-1,1] values directly as Vx/Vy/Wz and they become
-    // the mecanum input.  We do this by setting move_type = CMD_STOP
-    // (so the switch in PIDTask falls through to defaults) and setting
-    // custom fields — BUT the PIDTask switch resets Vx=Vy=Wz=0 on STOP.
-    //
-    // SOLUTION: Add CMD_DIRECT to WorldState.h and handle it in PID_TaskCode.
-    // For now we use the closest approximation: if we need simultaneous
-    // X+Y motion (diagonal) we pick CMD_FWD_L/R etc. at the right speed.
-    // Better: use raw Vx/Vy/Wz path described in PID_Control.
-    //
-    // We expose this cleanly via a new DriveCommand::CMD_DIRECT that
-    // carries Vx/Vy/Wz in the speed/omega fields extended below.
-    // See WorldState.h additions.
-
-    ChassisMotion cmd;
-    cmd.move_type = DriveCommand::CMD_DIRECT;
-    cmd.Vx        = Vx;
-    cmd.Vy        = Vy;
-    cmd.Wz        = Wz;
-    xQueueOverwrite(pidMailbox, &cmd);
+static void _drive(float Vx, float Vy, float Wz) {
+    ChassisMotion c;
+    c.move_type = DriveCommand::CMD_DIRECT;
+    c.Vx = Vx; c.Vy = Vy; c.Wz = Wz;
+    xQueueOverwrite(pidMailbox, &c);
 }
 
-// ── Public API ───────────────────────────────────────────────
-
-void PathPlanner_SetGoalByColor(const String& color) {
-    // Find matching goal from master table and configure a single-goal run.
-    // Called once before CaptureStartPose + Reset.
-    String c = color;
-    c.toLowerCase();
-    activeNumGoals = 0;
-
-    for (int i = 0; i < NUM_GOALS; i++) {
-        String label = String(goals[i].label);
-        label.toLowerCase();
-        if (label.startsWith(c)) {
-            activeGoals[0] = goals[i];
-            activeNumGoals = 1;
-            Serial.printf("[PathPlanner] Single-goal mode: %s  (%.2f, %.2f)\n",
-                          goals[i].label, goals[i].x, goals[i].y);
-            return;
-        }
-    }
-    // Unknown color — fall back to all goals
-    for (int i = 0; i < NUM_GOALS; i++) activeGoals[i] = goals[i];
-    activeNumGoals = NUM_GOALS;
-    Serial.printf("[PathPlanner] Unknown color '%s', using full goal table.\n", color.c_str());
+// Wrap angle to (-π, +π]
+static float _wrap(float a) {
+    while (a >  float(M_PI)) a -= 2.0f * float(M_PI);
+    while (a < -float(M_PI)) a += 2.0f * float(M_PI);
+    return a;
 }
 
-void PathPlanner_CaptureStartPose() {
-    startPose = Odometry_GetPose();
-    Serial.printf("[PathPlanner] Autonomous start pose captured: X=%.3f Y=%.3f TH=%.1f°\n",
-                  startPose.x, startPose.y, startPose.theta * 180.0f / M_PI);
+// ── Public API ────────────────────────────────────────────────
+
+void PathPlanner_Start() {
+    g_seg           = 0;
+    g_segStarted    = false;
+    g_pendingAction = DropAction::NONE;
+    g_waitingAck    = false;
+    g_dbgCtr        = 0;
+    _stop();
+    Serial.printf("[PATH] *** Autonomous path started — %d segments ***\n", PATH_LEN);
 }
 
-void PathPlanner_Reset() {
-    currentGoal   = 0;
-    goalAnnounced = false;
-    dbg_ctr       = 0;   // BUG5 FIX: reset debug counter for each new run
-
-    // Initialise activeGoals with full table if SetGoalByColor was not called
-    if (activeNumGoals == 0) {
-        for (int i = 0; i < NUM_GOALS; i++) activeGoals[i] = goals[i];
-        activeNumGoals = NUM_GOALS;
-    }
-
-    // Stop chassis before starting
-    ChassisMotion stop;
-    stop.move_type = DriveCommand::CMD_STOP;
-    stop.Vx = stop.Vy = stop.Wz = 0.0f;
-    xQueueOverwrite(pidMailbox, &stop);
-
-    Serial.println("[PathPlanner] Reset. Position-based navigation starting.");
+DropAction PathPlanner_GetPendingAction() {
+    return g_pendingAction;
 }
 
-bool PathPlanner_Update() {
-    if (PathPlanner_IsComplete()) return false;
-
-    const Goal& g = activeGoals[currentGoal];
-
-    // World-frame absolute target = start snapshot + relative offset
-    float target_x = startPose.x + g.x;
-    float target_y = startPose.y + g.y;
-
-    // Current pose
-    Pose p = Odometry_GetPose();
-
-    // Position error in world frame
-    float err_x = target_x - p.x;
-    float err_y = target_y - p.y;
-    float dist  = sqrtf(err_x * err_x + err_y * err_y);
-
-    // One-shot announcement
-    if (!goalAnnounced) {
-        goalAnnounced = true;
-        Serial.printf("[PathPlanner] Goal %d/%d '%s'  target=(%.3f, %.3f)\n",
-                      currentGoal + 1, activeNumGoals, g.label, target_x, target_y);
-    }
-
-    // ── Arrival check ────────────────────────────────────────
-    if (dist < POSITION_TOLERANCE) {
-        // Stop chassis
-        ChassisMotion stop;
-        stop.move_type = DriveCommand::CMD_STOP;
-        stop.Vx = stop.Vy = stop.Wz = 0.0f;
-        xQueueOverwrite(pidMailbox, &stop);
-
-        Serial.printf("[PathPlanner] Goal %d ARRIVED (dist=%.3f m)\n",
-                      currentGoal + 1, dist);
-        return true;
-    }
-
-    // ── Proportional position controller ─────────────────────
-    // Commands are in world frame — the mecanum drive is holonomic so
-    // we can directly command world-frame Vx/Vy without rotating to
-    // robot frame (the robot's heading correction handles rotation).
-    float cmd_x = _clampSpeed(Kp_pos * err_x);
-    float cmd_y = _clampSpeed(Kp_pos * err_y);
-
-    // Heading correction — keep θ = start heading (robot shouldn't rotate)
-    float theta_err = startPose.theta - p.theta;
-    // Wrap to (-π, π)
-    while (theta_err >  float(M_PI)) theta_err -= 2.0f * float(M_PI);
-    while (theta_err < -float(M_PI)) theta_err += 2.0f * float(M_PI);
-    float cmd_w = _clampSpeed(Kp_theta * theta_err);
-    // Limit rotation correction to ±25 % to avoid fighting translation
-    if (cmd_w >  0.25f) cmd_w =  0.25f;
-    if (cmd_w < -0.25f) cmd_w = -0.25f;
-
-    _sendMotion(cmd_x, cmd_y, cmd_w);
-
-    // Periodic progress print every ~1 s (50 brain ticks × 20 ms)
-    if (++dbg_ctr >= 50) {
-        dbg_ctr = 0;
-        Serial.printf("[PathPlanner] → pos=(%.3f,%.3f) err=(%.3f,%.3f) dist=%.3f\n",
-                      p.x, p.y, err_x, err_y, dist);
-    }
-
-    return false;
-}
-
-void PathPlanner_AdvanceGoal() {
-    currentGoal++;
-    goalAnnounced = false;
-
+void PathPlanner_AcknowledgeAction() {
+    g_pendingAction = DropAction::NONE;
+    g_waitingAck    = false;
+    g_seg++;
+    g_segStarted    = false;
+    g_dbgCtr        = 0;
     if (PathPlanner_IsComplete()) {
-        Serial.println("[PathPlanner] All goals complete.");
+        Serial.println("[PATH] All segments complete. Path finished.");
     } else {
-        Serial.printf("[PathPlanner] Advancing to goal %d/%d.\n",
-                      currentGoal + 1, NUM_GOALS);
+        Serial.printf("[PATH] ACK received — advancing to seg %d/%d\n",
+                      g_seg + 1, PATH_LEN);
     }
 }
 
 bool PathPlanner_IsComplete() {
-    return currentGoal >= activeNumGoals;
+    return g_seg >= PATH_LEN;
+}
+
+bool PathPlanner_Update() {
+    // Hold position and return true until the state machine ACKs the drop
+    if (g_waitingAck) return true;
+
+    if (PathPlanner_IsComplete()) return false;
+
+    const PathSeg& seg = PATH[g_seg];
+
+    // Snapshot the start pose once when a new segment begins
+    if (!g_segStarted) {
+        Pose p       = Odometry_GetPose();
+        g_startX     = p.x;
+        g_startY     = p.y;
+        g_startTheta = p.theta;
+        g_segStarted = true;
+        Serial.printf("[PATH] Seg %d/%d '%s' — start=(%.3f, %.3f, %.1f°)\n",
+                      g_seg + 1, PATH_LEN, seg.label,
+                      p.x, p.y, p.theta * 180.0f / float(M_PI));
+    }
+
+    Pose p = Odometry_GetPose();
+
+    // ── MOVE segment ─────────────────────────────────────────
+    if (seg.type == SegType::MOVE) {
+        float dx   = p.x - g_startX;
+        float dy   = p.y - g_startY;
+        float dist = sqrtf(dx * dx + dy * dy);
+
+        // Periodic progress log (~every 1 s at 50 Hz brain tick)
+        if (++g_dbgCtr >= 50) {
+            g_dbgCtr = 0;
+            Serial.printf("[PATH]   dist=%.3f/%.3f m\n", dist, seg.dist);
+        }
+
+        if (dist >= seg.dist - POS_TOL) {
+            _stop();
+            Serial.printf("[PATH] Seg %d '%s' ARRIVED (dist=%.3f m)\n",
+                          g_seg + 1, seg.label, dist);
+
+            if (seg.action != DropAction::NONE) {
+                // Signal state machine to execute the drop, then wait for ACK
+                g_pendingAction = seg.action;
+                g_waitingAck    = true;
+                return true;
+            }
+            // No drop action — auto-advance to the next segment
+            g_seg++;
+            g_segStarted = false;
+            g_dbgCtr     = 0;
+            return false;
+        }
+
+        // Keep driving (open-loop: no heading correction — Wz=0)
+        _drive(seg.Vx * MOVE_SPEED, seg.Vy * MOVE_SPEED, 0.0f);
+        return false;
+    }
+
+    // ── ROTATE segment ───────────────────────────────────────
+    if (seg.type == SegType::ROTATE) {
+        // Use |Δθ| so the check works correctly at 90° AND 180° without
+        // wrapping ambiguity. The commanded Wz sign sets direction.
+        float delta = fabsf(_wrap(p.theta - g_startTheta));
+
+        if (++g_dbgCtr >= 50) {
+            g_dbgCtr = 0;
+            Serial.printf("[PATH]   rot=%.1f°/%.1f°\n",
+                          delta * 180.0f / float(M_PI),
+                          seg.dist * 180.0f / float(M_PI));
+        }
+
+        if (delta >= seg.dist - ROT_TOL) {
+            _stop();
+            Serial.printf("[PATH] Seg %d '%s' ROTATE DONE (Δθ=%.1f°)\n",
+                          g_seg + 1, seg.label, delta * 180.0f / float(M_PI));
+            g_seg++;
+            g_segStarted = false;
+            g_dbgCtr     = 0;
+            return false;
+        }
+
+        _drive(0.0f, 0.0f, seg.Wz * ROT_SPEED);
+        return false;
+    }
+
+    return false;
 }

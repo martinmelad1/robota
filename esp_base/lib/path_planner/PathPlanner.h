@@ -1,42 +1,38 @@
 #pragma once
 #include <Arduino.h>
-#include "WorldState.h"
 
 // ============================================================
-//  PATH PLANNER — Position-based autonomous navigation
+//  PATH_PLANNER.H — Segment-based autonomous path
 //
-//  Competition map coordinates (world-frame, relative to (0,0) start):
-//    RED   station: (-1.0,  0.0)  — pure X strafe left
-//    GREEN station: (-1.0, -1.0)  — X + Y diagonal
-//    BLUE  station: (-0.7, -0.7)  — diagonal
+//  Fixed delivery sequence: RED → BLUE → GREEN
 //
-//  Typical call sequence per autonomous run:
-//    PathPlanner_SetGoalByColor("red")   ← sets single goal from cube color
-//    PathPlanner_CaptureStartPose()      ← locks pose at moment of MODE_AUTO
-//    PathPlanner_Reset()                 ← resets goal index, stops chassis
-//    then in NAVIGATING_TO_DROP loop:
-//      PathPlanner_Update() == true  →  arrived
-//        ARM_SendReached(color)
-//        WAIT_FOR_ARM_DROP (5 s)
-//          PathPlanner_AdvanceGoal()
-//          PathPlanner_IsComplete() → MANUAL_MODE
+//  Integration with StateMachine:
+//    1. Call PathPlanner_Start() when MODE_AUTO is triggered.
+//    2. Call PathPlanner_Update() every Brain tick while NAVIGATING.
+//       - Returns false → still moving, keep calling.
+//       - Returns true  → a DROP segment has been reached.
+//    3. Read PathPlanner_GetPendingAction() to know which colour.
+//    4. Execute the drop (send REACHED to ARM, wait for completion).
+//    5. Call PathPlanner_AcknowledgeAction() to advance to next segment.
+//    6. Repeat until PathPlanner_IsComplete() returns true.
 // ============================================================
 
-// Set a single goal from the cube color. Call BEFORE CaptureStartPose + Reset.
-// Accepts "red", "green", "blue" (case-insensitive).
-void PathPlanner_SetGoalByColor(const String& color);
+// Action to execute when a navigation segment completes
+enum class DropAction { NONE, DROP_RED, DROP_BLUE, DROP_GREEN };
 
-// Capture current odometry pose as autonomous start reference.
-void PathPlanner_CaptureStartPose();
+// Start (or restart) from segment 0
+void PathPlanner_Start();
 
-// Reset goal index to 0 and stop chassis.
-void PathPlanner_Reset();
-
-// Drive toward current goal. Returns TRUE when within POSITION_TOLERANCE.
+// Call every Brain tick while in NAVIGATING state.
+// Returns true only when a segment with a DROP action has been reached.
+// Non-drop segments auto-advance internally without returning true.
 bool PathPlanner_Update();
 
-// Advance to next goal (called from WAIT_FOR_ARM_DROP after arm timer).
-void PathPlanner_AdvanceGoal();
+// Which drop to perform after Update() returns true
+DropAction PathPlanner_GetPendingAction();
 
-// Returns true when all goals visited.
+// Tell the planner the drop is finished; advances to the next segment.
+void PathPlanner_AcknowledgeAction();
+
+// True when all segments have been completed
 bool PathPlanner_IsComplete();

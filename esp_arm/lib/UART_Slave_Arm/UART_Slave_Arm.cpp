@@ -104,6 +104,24 @@ void processArmCommand(char *cmd) {
         }
     }
 
+    // ── COLOR pre-announcement ─────────────────────────────────
+    // BASE sends this before navigation begins so the ARM can prepare.
+    // Nothing to do yet — colour is acted on when REACHED arrives.
+    else if (strncmp(cmd, "COLOR:", 6) == 0) {
+        Serial.printf("[ARM] Incoming colour pre-announced: %s\n", cmd + 6);
+        sendResponse("OK");
+    }
+
+    // ── REACHED: execute pick-from-slot + drop sequence ───────
+    // BASE sends this when the robot arrives at the drop zone.
+    // Triggers the full autonomous drop sequence on the ARM side.
+    else if (strncmp(cmd, "REACHED:", 8) == 0) {
+        const char* color = cmd + 8;
+        Serial.printf("[ARM] REACHED received for colour: %s\n", color);
+        Servo_QueueDropSequence(color);
+        sendResponse("OK");
+    }
+
     else {
         sendResponse("ERROR");
     }

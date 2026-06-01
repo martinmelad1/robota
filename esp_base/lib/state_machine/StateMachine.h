@@ -1,17 +1,18 @@
 #pragma once
 #include <Arduino.h>
 #include "WorldState.h"
+#include "PathPlanner.h"
 
 enum class RobotState {
     MANUAL_MODE,
     START_PICK_SEQUENCE,
     WAIT_FOR_VISION_QR,
     WAIT_FOR_ARM_PICK,
+    WAIT_FOR_ARM_PICK_FINISH,
     START_AUTO_DROP_SEQUENCE,
     NAVIGATING_TO_DROP,
-    WAIT_FOR_VISION_COLOR,
-    WAIT_FOR_ARM_DROP,
-    WAIT_FOR_ARM_PICK_FINISH
+    WAIT_FOR_ARM_DROP
+    // WAIT_FOR_VISION_COLOR removed — zone visual check not used
 };
 
 class MasterStateMachine {
@@ -22,9 +23,10 @@ private:
     int currentBoxTarget;
     int currentZoneTarget;
 
-    String lastCommand = "IDLE";
-    String currentModeStr = "MANUAL";
-    String foundColor = "";
+    String lastCommand      = "IDLE";
+    String currentModeStr   = "MANUAL";
+    String foundColor        = "";
+    DropAction pendingDrop   = DropAction::NONE; // set when PathPlanner signals a drop
 
 public:
     MasterStateMachine();
