@@ -5,7 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Robot Dashboard</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <!-- Chart.js served from LittleFS — loads synchronously before page JS runs -->
+  <script src="/chart.min.js"></script>
   <style>
     :root {
       --bg: #080c14;
@@ -20,17 +21,9 @@
       --red: #ff4560;
       --orange: #ff9f40;
       --yellow: #ffe030;
-      --vel-set: #3d9eff;
-      --vel-act: #00e5a0;
-      --pos-set: #9b72ff;
-      --pos-act: #ff9f40;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Courier New', monospace;
@@ -49,32 +42,10 @@
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border);
     }
-
-    .top-bar h1 {
-      font-size: 16px;
-      color: var(--green);
-      letter-spacing: 3px;
-      text-transform: uppercase;
-    }
-
-    .conn-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--red);
-    }
-
-    .dot.on {
-      background: var(--green);
-    }
+    .top-bar h1 { font-size: 16px; color: var(--green); letter-spacing: 3px; text-transform: uppercase; }
+    .conn-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    .dot.on { background: var(--green); }
 
     /* ── TAB NAV ── */
     .tab-nav {
@@ -82,9 +53,7 @@
       gap: 4px;
       margin-bottom: 16px;
       border-bottom: 1px solid var(--border);
-      padding-bottom: 0;
     }
-
     .tab-btn {
       padding: 8px 18px;
       font-size: 11px;
@@ -100,20 +69,11 @@
       transition: color 0.15s, border-color 0.15s;
       margin-bottom: -1px;
     }
-
-    .tab-btn.active {
-      color: var(--green);
-      border-bottom-color: var(--green);
-    }
+    .tab-btn.active { color: var(--green); border-bottom-color: var(--green); }
 
     /* ── SECTION HIDE/SHOW ── */
-    .tab-section {
-      display: none;
-    }
-
-    .tab-section.active {
-      display: block;
-    }
+    .tab-section { display: none; }
+    .tab-section.active { display: block; }
 
     /* ── CARD ── */
     .card {
@@ -123,108 +83,20 @@
       padding: 14px;
       margin-bottom: 12px;
     }
-
-    .card h2 {
-      font-size: 9px;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 2px;
-      margin-bottom: 12px;
-    }
-
-    /* ── STATUS ROW ── */
-    .status-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-
-    .stat-cell {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 10px;
-      text-align: center;
-    }
-
-    .stat-lbl {
-      font-size: 9px;
-      color: var(--muted);
-      letter-spacing: 1px;
-      margin-bottom: 4px;
-    }
-
-    .stat-val {
-      font-size: 20px;
-      font-weight: 700;
-    }
-
-    .stat-val.green {
-      color: var(--green);
-    }
-
-    .stat-val.blue {
-      color: var(--blue);
-    }
-
-    .stat-val.purple {
-      color: var(--purple);
-    }
+    .card h2 { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
 
     /* ── COMMAND / MODE ── */
-    .cmd-box {
-      text-align: center;
-      padding: 16px;
-    }
+    .cmd-box { text-align: center; padding: 16px; }
+    .cmd-val { font-size: 28px; font-weight: 700; letter-spacing: 3px; min-height: 40px; }
+    .cmd-val.moving  { color: var(--green); }
+    .cmd-val.stopped { color: var(--muted); }
+    .cmd-val.estop   { color: var(--red); }
+    .cmd-val.arm     { color: var(--blue); }
 
-    .cmd-val {
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: 3px;
-      min-height: 40px;
-    }
-
-    .cmd-val.moving {
-      color: var(--green);
-    }
-
-    .cmd-val.stopped {
-      color: var(--muted);
-    }
-
-    .cmd-val.estop {
-      color: var(--red);
-    }
-
-    .cmd-val.arm {
-      color: var(--blue);
-    }
-
-    .mode-pill {
-      display: inline-block;
-      padding: 3px 12px;
-      border-radius: 20px;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 2px;
-      margin-top: 8px;
-    }
-
-    .pill-manual {
-      background: #0a1a30;
-      color: var(--blue);
-    }
-
-    .pill-auto {
-      background: #082a18;
-      color: var(--green);
-    }
-
-    .pill-pick {
-      background: #1a0f30;
-      color: var(--purple);
-    }
+    .mode-pill { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 2px; margin-top: 8px; }
+    .pill-manual { background: #0a1a30; color: var(--blue); }
+    .pill-auto   { background: #082a18; color: var(--green); }
+    .pill-pick   { background: #1a0f30; color: var(--purple); }
 
     /* ── ARROW GRID ── */
     .arrow-grid {
@@ -235,7 +107,6 @@
       margin: 0 auto;
       width: fit-content;
     }
-
     .acell {
       background: #0e1420;
       border: 1px solid var(--border);
@@ -247,212 +118,35 @@
       color: var(--border2);
       transition: all 0.15s;
     }
-
-    .acell.active {
-      background: #082a18;
-      border-color: var(--green);
-      color: var(--green);
-    }
-
-    .acell.center {
-      font-size: 10px;
-    }
-
-    .acell.center.active {
-      background: #2a0808;
-      border-color: var(--red);
-      color: var(--red);
-    }
+    .acell.active { background: #082a18; border-color: var(--green); color: var(--green); }
+    .acell.center { font-size: 10px; }
+    .acell.center.active { background: #2a0808; border-color: var(--red); color: var(--red); }
 
     /* ── POS GRID ── */
-    .pos-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 8px;
-    }
-
-    .pos-item {
-      text-align: center;
-    }
-
-    .pos-lbl {
-      font-size: 9px;
-      color: var(--muted);
-      margin-bottom: 2px;
-    }
-
-    .pos-val {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--purple);
-    }
-
-    .pos-unit {
-      font-size: 9px;
-      color: var(--muted);
-    }
+    .pos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .pos-item { text-align: center; }
+    .pos-lbl  { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .pos-val  { font-size: 22px; font-weight: 700; color: var(--purple); }
+    .pos-unit { font-size: 9px; color: var(--muted); }
 
     /* ── WHEEL SPEED BARS ── */
-    .wheel-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 6px;
-    }
-
-    .wheel-box {
-      background: #0a0f1c;
-      border-radius: 6px;
-      padding: 8px;
-      text-align: center;
-    }
-
-    .wheel-lbl {
-      font-size: 9px;
-      color: var(--muted);
-      margin-bottom: 2px;
-    }
-
-    .wheel-val {
-      font-size: 16px;
-      color: var(--green);
-      font-weight: 700;
-    }
-
-    .bar-wrap {
-      background: #0e1420;
-      border-radius: 2px;
-      height: 4px;
-      margin-top: 4px;
-    }
-
-    .bar {
-      height: 100%;
-      background: var(--green);
-      border-radius: 2px;
-      transition: width 0.1s;
-      width: 0%;
-    }
+    .wheel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .wheel-box { background: #0a0f1c; border-radius: 6px; padding: 8px; text-align: center; }
+    .wheel-lbl { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .wheel-val { font-size: 16px; color: var(--green); font-weight: 700; }
+    .bar-wrap  { background: #0e1420; border-radius: 2px; height: 4px; margin-top: 4px; }
+    .bar       { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.1s; width: 0%; }
 
     /* ── JOINT BARS ── */
-    .joint-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-
-    .jlbl {
-      font-size: 10px;
-      color: var(--muted);
-      width: 22px;
-    }
-
-    .jbar-wrap {
-      flex: 1;
-      background: #0a0f1c;
-      border-radius: 2px;
-      height: 7px;
-    }
-
-    .jbar {
-      height: 100%;
-      background: var(--blue);
-      border-radius: 2px;
-      transition: width 0.2s;
-    }
-
-    .jval {
-      font-size: 11px;
-      color: var(--blue);
-      width: 50px;
-      text-align: right;
-    }
+    .joint-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .jlbl      { font-size: 10px; color: var(--muted); width: 22px; }
+    .jbar-wrap { flex: 1; background: #0a0f1c; border-radius: 2px; height: 7px; }
+    .jbar      { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.2s; }
+    .jval      { font-size: 11px; color: var(--blue); width: 50px; text-align: right; }
 
     /* ════════════════════════════════════════════════════
-     PLOTS
-  ════════════════════════════════════════════════════ */
-    .plot-tabs {
-      display: flex;
-      gap: 4px;
-      margin-bottom: 10px;
-      flex-wrap: wrap;
-    }
-
-    .plot-tab-btn {
-      padding: 5px 12px;
-      font-size: 10px;
-      letter-spacing: 1px;
-      font-family: 'Courier New', monospace;
-      font-weight: 700;
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: 4px;
-      color: var(--muted);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-
-    .plot-tab-btn.active {
-      background: #0a1a30;
-      border-color: var(--blue);
-      color: var(--blue);
-    }
-
-    .plot-panel {
-      display: none;
-    }
-
-    .plot-panel.active {
-      display: block;
-    }
-
-    .plot-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .plot-box {
-      background: #0a0f1c;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-    }
-
-    .plot-title {
-      font-size: 9px;
-      color: var(--muted);
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-
-    .plot-box canvas {
-      display: block;
-      width: 100% !important;
-      height: 140px !important;
-    }
-
-    .legend-row {
-      display: flex;
-      gap: 12px;
-      margin-top: 6px;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 9px;
-      color: var(--muted);
-    }
-
-    .legend-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-
+       PLOTS TAB
+    ════════════════════════════════════════════════════ */
     .plot-controls {
       display: flex;
       gap: 8px;
@@ -460,11 +154,7 @@
       margin-bottom: 10px;
       flex-wrap: wrap;
     }
-
-    .plot-ctrl-lbl {
-      font-size: 10px;
-      color: var(--muted);
-    }
+    .plot-ctrl-lbl { font-size: 10px; color: var(--muted); }
 
     .buf-btn {
       padding: 4px 10px;
@@ -477,12 +167,7 @@
       cursor: pointer;
       transition: all 0.12s;
     }
-
-    .buf-btn.active {
-      background: #0a1a30;
-      border-color: var(--blue);
-      color: var(--blue);
-    }
+    .buf-btn.active { background: #0a1a30; border-color: var(--blue); color: var(--blue); }
 
     .clear-btn {
       padding: 4px 10px;
@@ -494,6 +179,80 @@
       color: var(--red);
       cursor: pointer;
       margin-left: auto;
+    }
+
+    /* 2×2 grid of RPM charts */
+    .rpm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .plot-box {
+      background: #0a0f1c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .plot-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .plot-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .plot-rpm-now {
+      font-size: 10px;
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    /* Fixed-height canvas wrapper so Chart.js always gets a definite height */
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 150px;
+    }
+
+    .chart-wrap canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--muted); }
+    .legend-dot  { width: 10px; height: 3px; border-radius: 2px; }
+
+    /* ── Y-AXIS LABEL ── */
+    .plot-y-label {
+      font-size: 8px;
+      color: var(--muted);
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      text-align: center;
+      padding-right: 4px;
+      letter-spacing: 1px;
+    }
+
+    .plot-inner {
+      display: flex;
+      gap: 0;
+      align-items: stretch;
     }
   </style>
 </head>
@@ -511,12 +270,12 @@
   <!-- ── TAB NAVIGATION ─────────────────────────────────────── -->
   <div class="tab-nav">
     <button class="tab-btn active" onclick="switchTab('telemetry')">Telemetry</button>
-    <button class="tab-btn" onclick="switchTab('plots')">Plots</button>
+    <button class="tab-btn" onclick="switchTab('plots')">RPM Plots</button>
   </div>
 
   <!-- ══════════════════════════════════════════════════════════
-     TAB 1 — TELEMETRY
-══════════════════════════════════════════════════════════ -->
+       TAB 1 — TELEMETRY
+  ══════════════════════════════════════════════════════════ -->
   <div id="tab-telemetry" class="tab-section active">
 
     <div class="card cmd-box">
@@ -566,30 +325,22 @@
         <div class="wheel-box">
           <div class="wheel-lbl">Front-Left</div>
           <div class="wheel-val" id="fl">0.00</div>
-          <div class="bar-wrap">
-            <div class="bar" id="fl-bar"></div>
-          </div>
+          <div class="bar-wrap"><div class="bar" id="fl-bar"></div></div>
         </div>
         <div class="wheel-box">
           <div class="wheel-lbl">Front-Right</div>
           <div class="wheel-val" id="fr">0.00</div>
-          <div class="bar-wrap">
-            <div class="bar" id="fr-bar"></div>
-          </div>
+          <div class="bar-wrap"><div class="bar" id="fr-bar"></div></div>
         </div>
         <div class="wheel-box">
           <div class="wheel-lbl">Rear-Left</div>
           <div class="wheel-val" id="rl">0.00</div>
-          <div class="bar-wrap">
-            <div class="bar" id="rl-bar"></div>
-          </div>
+          <div class="bar-wrap"><div class="bar" id="rl-bar"></div></div>
         </div>
         <div class="wheel-box">
           <div class="wheel-lbl">Rear-Right</div>
           <div class="wheel-val" id="rr">0.00</div>
-          <div class="bar-wrap">
-            <div class="bar" id="rr-bar"></div>
-          </div>
+          <div class="bar-wrap"><div class="bar" id="rr-bar"></div></div>
         </div>
       </div>
     </div>
@@ -597,19 +348,16 @@
     <div class="card">
       <h2>Arm Joints</h2>
       <div class="joint-row"><span class="jlbl">J1</span>
-        <div class="jbar-wrap">
-          <div class="jbar" id="j1-bar" style="width:50%"></div>
-        </div><span class="jval" id="j1">90°</span>
+        <div class="jbar-wrap"><div class="jbar" id="j1-bar" style="width:50%"></div></div>
+        <span class="jval" id="j1">90°</span>
       </div>
       <div class="joint-row"><span class="jlbl">J2</span>
-        <div class="jbar-wrap">
-          <div class="jbar" id="j2-bar" style="width:50%"></div>
-        </div><span class="jval" id="j2">90°</span>
+        <div class="jbar-wrap"><div class="jbar" id="j2-bar" style="width:50%"></div></div>
+        <span class="jval" id="j2">90°</span>
       </div>
       <div class="joint-row"><span class="jlbl">J3</span>
-        <div class="jbar-wrap">
-          <div class="jbar" id="j3-bar" style="width:50%"></div>
-        </div><span class="jval" id="j3">90°</span>
+        <div class="jbar-wrap"><div class="jbar" id="j3-bar" style="width:50%"></div></div>
+        <span class="jval" id="j3">90°</span>
       </div>
     </div>
 
@@ -617,181 +365,155 @@
 
 
   <!-- ══════════════════════════════════════════════════════════
-     TAB 2 — PLOTS
-══════════════════════════════════════════════════════════ -->
+       TAB 2 — RPM PLOTS
+       4 charts, one per wheel, each showing:
+         Blue  = Simulated (desired / setpoint) RPM
+         Green = Real      (measured / encoder) RPM
+  ══════════════════════════════════════════════════════════ -->
   <div id="tab-plots" class="tab-section">
 
-    <div class="card" style="padding-bottom: 8px;">
+    <div class="card" style="padding-bottom:8px;">
       <div class="plot-controls">
-        <span class="plot-ctrl-lbl">Buffer:</span>
-        <button class="buf-btn active" onclick="setBuf(60)" id="buf-60">60 pts</button>
-        <button class="buf-btn" onclick="setBuf(120)" id="buf-120">120 pts</button>
-        <button class="buf-btn" onclick="setBuf(300)" id="buf-300">300 pts</button>
+        <span class="plot-ctrl-lbl">History:</span>
+        <button class="buf-btn active" id="buf-60"  onclick="setBuf(60)">60 pts</button>
+        <button class="buf-btn"        id="buf-120" onclick="setBuf(120)">120 pts</button>
+        <button class="buf-btn"        id="buf-300" onclick="setBuf(300)">300 pts</button>
         <button class="clear-btn" onclick="clearCharts()">&#x2715; Clear</button>
       </div>
-      <div class="plot-tabs">
-        <button class="plot-tab-btn active" onclick="setPlotTab('velocity')">Velocity</button>
-        <button class="plot-tab-btn" onclick="setPlotTab('position')">Position</button>
-      </div>
     </div>
 
-    <!-- Velocity plots -->
-    <div class="plot-panel active" id="pp-velocity">
-      <div class="plot-grid">
-        <div class="plot-box">
-          <div class="plot-title">FL — Velocity</div>
-          <canvas id="ch-vel-FL"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#3d9eff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#00e5a0"></div>Actual
-            </div>
-          </div>
+    <div class="rpm-grid">
+
+      <!-- FL -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">FL &mdash; Front Left</div>
+          <div class="plot-rpm-now" id="rpm-now-FL">0 RPM</div>
         </div>
-        <div class="plot-box">
-          <div class="plot-title">FR — Velocity</div>
-          <canvas id="ch-vel-FR"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#3d9eff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#00e5a0"></div>Actual
-            </div>
-          </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-FL"></canvas></div>
         </div>
-        <div class="plot-box">
-          <div class="plot-title">RL — Velocity</div>
-          <canvas id="ch-vel-RL"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#3d9eff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#00e5a0"></div>Actual
-            </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
           </div>
-        </div>
-        <div class="plot-box">
-          <div class="plot-title">RR — Velocity</div>
-          <canvas id="ch-vel-RR"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#3d9eff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#00e5a0"></div>Actual
-            </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
           </div>
         </div>
       </div>
-    </div>
 
-    <!-- Position plots -->
-    <div class="plot-panel" id="pp-position">
-      <div class="plot-grid">
-        <div class="plot-box">
-          <div class="plot-title">FL — Position (ticks)</div>
-          <canvas id="ch-pos-FL"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#9b72ff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#ff9f40"></div>Actual
-            </div>
-          </div>
+      <!-- FR -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">FR &mdash; Front Right</div>
+          <div class="plot-rpm-now" id="rpm-now-FR">0 RPM</div>
         </div>
-        <div class="plot-box">
-          <div class="plot-title">FR — Position (ticks)</div>
-          <canvas id="ch-pos-FR"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#9b72ff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#ff9f40"></div>Actual
-            </div>
-          </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-FR"></canvas></div>
         </div>
-        <div class="plot-box">
-          <div class="plot-title">RL — Position (ticks)</div>
-          <canvas id="ch-pos-RL"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#9b72ff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#ff9f40"></div>Actual
-            </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
           </div>
-        </div>
-        <div class="plot-box">
-          <div class="plot-title">RR — Position (ticks)</div>
-          <canvas id="ch-pos-RR"></canvas>
-          <div class="legend-row">
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#9b72ff"></div>Desired
-            </div>
-            <div class="legend-item">
-              <div class="legend-dot" style="background:#ff9f40"></div>Actual
-            </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
           </div>
         </div>
       </div>
-    </div>
 
+      <!-- RL -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">RL &mdash; Rear Left</div>
+          <div class="plot-rpm-now" id="rpm-now-RL">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-RL"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+      <!-- RR -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">RR &mdash; Rear Right</div>
+          <div class="plot-rpm-now" id="rpm-now-RR">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-RR"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /rpm-grid -->
   </div><!-- /tab-plots -->
 
   <script>
     // ══════════════════════════════════════════════════════════
+    // CONSTANTS & CONVERSION
+    // ══════════════════════════════════════════════════════════
+    // Use the hostname the browser used to load this page — it is always the
+    // correct IP of the ESP32 (AP mode: 192.168.4.1, or STA mode IP).
+    const ESP32_IP = window.location.hostname;
+
+    // PID_Compute is called every 10 ms (PID task: vTaskDelay(10/portTICK_PERIOD_MS))
+    // Encoder PPR = 748 (quadrature, per PID_Control.cpp)
+    // RPM = (ticks_per_sample / PPR) * (60_000 ms/min / sample_ms)
+    const PPR        = 748;
+    const SAMPLE_MS  = 10;
+    const TICKS_TO_RPM = 60000.0 / (PPR * SAMPLE_MS); // ≈ 8.022
+
+    // ══════════════════════════════════════════════════════════
     // WEBSOCKET
     // ══════════════════════════════════════════════════════════
-    const ESP32_IP = "192.168.4.1";
-    const dot = document.getElementById("dot");
+    const dotEl    = document.getElementById("dot");
     const connText = document.getElementById("conn-text");
-    let ws;
-    let velCharts;
-    let posCharts;
+    let   wsConn;
 
     function connect() {
-      ws = new WebSocket("ws://" + ESP32_IP + "/ws");
-      ws.onopen = () => { dot.classList.add("on"); connText.textContent = "Connected (192.168.4.1)"; };
-      ws.onclose = () => { dot.classList.remove("on"); connText.textContent = "Disconnected — retrying..."; setTimeout(connect, 2000); };
-      ws.onmessage = e => {
-        try {
-          const d = JSON.parse(e.data);
-          updateAll(d);
-        } catch (err) {
-          console.error("Telemetry parse error:", err, e.data);
-        }
+      wsConn = new WebSocket("ws://" + ESP32_IP + "/ws");
+      wsConn.onopen  = () => { dotEl.classList.add("on");    connText.textContent = "Connected (" + ESP32_IP + ")"; };
+      wsConn.onclose = () => { dotEl.classList.remove("on"); connText.textContent = "Disconnected — retrying..."; setTimeout(connect, 3000); };
+      wsConn.onerror = () => { /* onclose fires after onerror — no duplicate retry needed */ };
+      wsConn.onmessage = e => {
+        try   { updateAll(JSON.parse(e.data)); }
+        catch  { /* ignore malformed frames */ }
       };
     }
 
     // ══════════════════════════════════════════════════════════
     // TAB ROUTING
     // ══════════════════════════════════════════════════════════
-    const TAB_NAMES = ['telemetry', 'plots'];
-
     function switchTab(name) {
       document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('tab-' + name).classList.add('active');
-      TAB_NAMES.forEach((n, i) => {
-        if (n === name) document.querySelectorAll('.tab-btn')[i].classList.add('active');
-      });
+      const idx = ['telemetry', 'plots'].indexOf(name);
+      document.querySelectorAll('.tab-btn')[idx].classList.add('active');
 
-      // KEY FIX: when the plots tab becomes visible, give the browser one paint
-      // cycle to lay out the now-visible canvases, then resize all charts.
-      // Without this Chart.js measures 0×0 because the canvases were hidden.
+      // Give the browser two paint cycles to lay out the now-visible canvases,
+      // then resize all charts (critical: canvases in display:none have 0-width).
       if (name === 'plots') {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resizeAllCharts();
-          });
-        });
+        requestAnimationFrame(() => requestAnimationFrame(() => resizeAllCharts()));
       }
     }
 
@@ -799,168 +521,237 @@
     // TELEMETRY UPDATE
     // ══════════════════════════════════════════════════════════
     const arrowMap = {
-      "FWD": "a-FW", "BWD": "a-BW", "LEFT": "a-LL", "RIGHT": "a-RR",
-      "FWD_LEFT": "a-FL", "FWD_RIGHT": "a-FR",
-      "BWD_LEFT": "a-BL", "BWD_RIGHT": "a-BR",
-      "STOP": "a-ST", "IDLE": "a-ST"
+      "FWD":       "a-FW", "BWD":       "a-BW",
+      "LEFT":      "a-LL", "RIGHT":     "a-RR",
+      "FWD_LEFT":  "a-FL", "FWD_RIGHT": "a-FR",
+      "BWD_LEFT":  "a-BL", "BWD_RIGHT": "a-BR",
+      "STOP": "a-ST",      "IDLE":      "a-ST"
     };
 
     function updateAll(d) {
-      // Command
+      // ── Command display ──
       const cmdEl = document.getElementById("cmd-display");
-      cmdEl.textContent = d.cmd;
+      cmdEl.textContent = d.cmd || "IDLE";
       cmdEl.className = "cmd-val";
-      const cmd = d.cmd;
+      const cmd = d.cmd || "";
       if (cmd === "IDLE" || cmd === "STOP" || cmd === "ARM_STOP") cmdEl.classList.add("stopped");
-      else if (cmd === "EMERGENCY STOP") cmdEl.classList.add("estop");
-      else if (cmd.startsWith("J") || cmd.startsWith("GRIP")) cmdEl.classList.add("arm");
-      else cmdEl.classList.add("moving");
+      else if (cmd === "EMERGENCY STOP")                           cmdEl.classList.add("estop");
+      else if (cmd.startsWith("J") || cmd.startsWith("GRIP"))     cmdEl.classList.add("arm");
+      else                                                         cmdEl.classList.add("moving");
 
-      // Mode pill
+      // ── Mode pill ──
       const pill = document.getElementById("mode-pill");
-      if (d.mode === "AUTONOMOUS") { pill.textContent = "AUTONOMOUS"; pill.className = "mode-pill pill-auto"; }
-      else if (d.mode === "PICK") { pill.textContent = "AUTO PICK"; pill.className = "mode-pill pill-pick"; }
-      else { pill.textContent = "MANUAL"; pill.className = "mode-pill pill-manual"; }
+      if      (d.mode === "AUTONOMOUS") { pill.textContent = "AUTONOMOUS"; pill.className = "mode-pill pill-auto"; }
+      else if (d.mode === "PICK")       { pill.textContent = "AUTO PICK";  pill.className = "mode-pill pill-pick"; }
+      else                              { pill.textContent = "MANUAL";     pill.className = "mode-pill pill-manual"; }
 
-      // Arrows
+      // ── Arrow highlight ──
       Object.values(arrowMap).forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove("active"); });
       const ac = arrowMap[d.cmd];
       if (ac) { const el = document.getElementById(ac); if (el) el.classList.add("active"); }
 
-      // Odometry
-      document.getElementById("px").textContent = (d.px || 0).toFixed(3);
-      document.getElementById("py").textContent = (d.py || 0).toFixed(3);
+      // ── Odometry ──
+      document.getElementById("px").textContent  = (d.px  || 0).toFixed(3);
+      document.getElementById("py").textContent  = (d.py  || 0).toFixed(3);
       document.getElementById("hdg").textContent = (d.hdg || 0).toFixed(1);
 
-      // Wheel speeds
-      const ids = ["fl", "fr", "rl", "rr"];
-      const ws_ = [d.fl || 0, d.fr || 0, d.rl || 0, d.rr || 0];
-      ids.forEach((id, i) => {
-        document.getElementById(id).textContent = ws_[i].toFixed(2);
-        document.getElementById(id + "-bar").style.width = Math.min(Math.abs(ws_[i]) * 100, 100) + "%";
+      // ── Wheel speed bars (ticks/sample) ──
+      const tickIds = ["fl", "fr", "rl", "rr"];
+      const ticks   = [d.fl || 0, d.fr || 0, d.rl || 0, d.rr || 0];
+      tickIds.forEach((id, i) => {
+        document.getElementById(id).textContent        = ticks[i].toFixed(2);
+        document.getElementById(id + "-bar").style.width = Math.min(Math.abs(ticks[i]) * 100, 100) + "%";
       });
 
-      // Joints
+      // ── Arm joints ──
       function ab(a) { return Math.min(100, Math.max(0, a / 180 * 100)); }
-      document.getElementById("j1").textContent = (d.j1 || 0).toFixed(1) + "°";
-      document.getElementById("j2").textContent = (d.j2 || 0).toFixed(1) + "°";
-      document.getElementById("j3").textContent = (d.j3 || 0).toFixed(1) + "°";
-      document.getElementById("j1-bar").style.width = ab(d.j1 || 0) + "%";
-      document.getElementById("j2-bar").style.width = ab(d.j2 || 0) + "%";
-      document.getElementById("j3-bar").style.width = ab(d.j3 || 0) + "%";
+      ["j1", "j2", "j3"].forEach(j => {
+        const val = d[j] || 0;
+        document.getElementById(j).textContent         = val.toFixed(1) + "°";
+        document.getElementById(j + "-bar").style.width = ab(val) + "%";
+      });
 
-      // Push to plots — charts are always initialised so this is safe from frame 1
-      if (Array.isArray(d.vSet) && d.vSet.length === 4 && Array.isArray(d.vAct) && d.vAct.length === 4) {
-        pushVelocityData(d.vSet, d.vAct);
+      // ── RPM plot data ──
+      // Prefer pre-computed rpmSet/rpmAct from firmware.
+      // Fall back to computing from vSet/vAct (ticks/sample) if absent.
+      let rpmSet, rpmAct;
+
+      if (Array.isArray(d.rpmSet) && d.rpmSet.length === 4 &&
+          Array.isArray(d.rpmAct) && d.rpmAct.length === 4) {
+        rpmSet = d.rpmSet;
+        rpmAct = d.rpmAct;
+      } else if (Array.isArray(d.vSet) && d.vSet.length === 4 &&
+                 Array.isArray(d.vAct) && d.vAct.length === 4) {
+        rpmSet = d.vSet.map(v => v * TICKS_TO_RPM);
+        rpmAct = d.vAct.map(v => v * TICKS_TO_RPM);
       }
-      if (Array.isArray(d.pSet) && d.pSet.length === 4 && Array.isArray(d.pAct) && d.pAct.length === 4) {
-        pushPositionData(d.pSet, d.pAct);
+
+      if (rpmSet && rpmAct) {
+        pushRPMData(rpmSet, rpmAct);
       }
     }
 
     // ══════════════════════════════════════════════════════════
-    // CHART.JS PLOTS
+    // CHART.JS — RPM CHARTS
     //
-    // FIX: Charts are created immediately (not deferred to DOMContentLoaded)
-    // with explicit pixel dimensions on the canvas so Chart.js never sees
-    // a 0×0 element regardless of tab visibility.
+    // Each canvas gets explicit pixel dimensions (width/height attrs)
+    // so Chart.js can size itself correctly even while the parent
+    // tab is display:none at initialisation time.
     // ══════════════════════════════════════════════════════════
-    let BUF_SIZE = 60;
-    let tick = 0;
+    let BUF_SIZE  = 60;
+    let elapsedMs = 0;            // running time axis (milliseconds)
+    const BROADCAST_HZ = 10;     // WebSocket broadcast rate from ESP32
+    const MS_PER_TICK  = 1000 / BROADCAST_HZ;
 
-    function makeChart(canvasId, setColor, actColor) {
+    function makeRPMChart(canvasId) {
       const canvas = document.getElementById(canvasId);
-      // Set explicit pixel dimensions so Chart.js measures correctly
-      // even when the containing tab is display:none at creation time.
-      canvas.width = 300;
-      canvas.height = 140;
+      // Explicit pixel size prevents 0×0 measurement while hidden.
+      canvas.width  = 400;
+      canvas.height = 150;
       const ctx = canvas.getContext('2d');
       return new Chart(ctx, {
         type: 'line',
         data: {
           labels: [],
           datasets: [
-            { label: 'Desired', data: [], borderColor: setColor, borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false },
-            { label: 'Actual', data: [], borderColor: actColor, borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false }
+            {
+              label: 'Simulated',
+              data: [],
+              borderColor: '#3d9eff',
+              backgroundColor: 'rgba(61,158,255,0.07)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true
+            },
+            {
+              label: 'Real',
+              data: [],
+              borderColor: '#00e5a0',
+              backgroundColor: 'rgba(0,229,160,0.06)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true
+            }
           ]
         },
         options: {
           animation: false,
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' RPM'
+              },
+              backgroundColor: '#0e1420',
+              titleColor: '#c8d8f0',
+              bodyColor: '#4a5878',
+              borderColor: '#243050',
+              borderWidth: 1
+            }
+          },
           scales: {
-            x: { display: false },
+            x: {
+              display: true,
+              grid: { color: '#111825' },
+              ticks: {
+                color: '#4a5878',
+                font: { size: 8 },
+                maxTicksLimit: 6,
+                // Show every nth label as "Xs"
+                callback: function(val, idx) {
+                  const lbl = this.getLabelForValue(val);
+                  return lbl;
+                }
+              },
+              title: {
+                display: true,
+                text: 'Time (s)',
+                color: '#4a5878',
+                font: { size: 8 }
+              }
+            },
             y: {
               display: true,
-              grid: { color: '#1a2235' },
-              ticks: { color: '#4a5878', font: { size: 9 }, maxTicksLimit: 5 }
+              grid: { color: '#111825' },
+              ticks: { color: '#4a5878', font: { size: 8 }, maxTicksLimit: 5 },
+              title: {
+                display: false  // we use the CSS rotated label instead
+              }
             }
           }
         }
       });
     }
 
-    // Create all 8 charts immediately — canvas pixel dimensions are set above
-    // so they render correctly even though the Plots tab is initially hidden.
-    velCharts = {
-      FL: makeChart('ch-vel-FL', '#3d9eff', '#00e5a0'),
-      FR: makeChart('ch-vel-FR', '#3d9eff', '#00e5a0'),
-      RL: makeChart('ch-vel-RL', '#3d9eff', '#00e5a0'),
-      RR: makeChart('ch-vel-RR', '#3d9eff', '#00e5a0'),
-    };
-    posCharts = {
-      FL: makeChart('ch-pos-FL', '#9b72ff', '#ff9f40'),
-      FR: makeChart('ch-pos-FR', '#9b72ff', '#ff9f40'),
-      RL: makeChart('ch-pos-RL', '#9b72ff', '#ff9f40'),
-      RR: makeChart('ch-pos-RR', '#9b72ff', '#ff9f40'),
-    };
-
+    // ── Connect WebSocket FIRST — before chart init ──────────────
+    // Chart.js is loaded from a CDN. If the CDN is unreachable (the
+    // ESP32 AP has no internet), makeRPMChart() would throw and
+    // connect() would never be called, leaving the dot permanently red.
+    // Connecting first guarantees telemetry works regardless of CDN.
     connect();
 
+    // Initialise all 4 charts immediately (before tab is visible).
+    // Chart.js is served from LittleFS synchronously so it is always
+    // available here — no try/catch needed.
+    const rpmCharts = {
+      FL: makeRPMChart('ch-rpm-FL'),
+      FR: makeRPMChart('ch-rpm-FR'),
+      RL: makeRPMChart('ch-rpm-RL'),
+      RR: makeRPMChart('ch-rpm-RR'),
+    };
+
     function resizeAllCharts() {
-      [...Object.values(velCharts), ...Object.values(posCharts)].forEach(c => { if (c) c.resize(); });
+      Object.values(rpmCharts).forEach(c => { if (c) c.resize(); });
     }
 
-    function pushToChart(chart, setVal, actVal) {
-      if (!chart) return;
-      const d = chart.data;
-      d.labels.push(tick.toString());
-      d.datasets[0].data.push(setVal);
-      d.datasets[1].data.push(actVal);
-      if (d.labels.length > BUF_SIZE) {
-        d.labels.shift();
-        d.datasets[0].data.shift();
-        d.datasets[1].data.shift();
-      }
-      chart.update('none');
+    // ── Push one frame of RPM data to all 4 charts ──
+    function pushRPMData(rpmSet, rpmAct) {
+      const timeSec = (elapsedMs / 1000).toFixed(1);
+      elapsedMs += MS_PER_TICK;
+
+      const wheels = ['FL', 'FR', 'RL', 'RR'];
+      wheels.forEach((w, i) => {
+        const chart = rpmCharts[w];
+        if (!chart) return;
+
+        const d = chart.data;
+        d.labels.push(timeSec + 's');
+        d.datasets[0].data.push(rpmSet[i]);   // Simulated (blue)
+        d.datasets[1].data.push(rpmAct[i]);   // Real      (green)
+
+        // Trim to buffer size
+        if (d.labels.length > BUF_SIZE) {
+          d.labels.shift();
+          d.datasets[0].data.shift();
+          d.datasets[1].data.shift();
+        }
+
+        chart.update('none');
+
+        // Update live RPM badge (real value)
+        const badge = document.getElementById('rpm-now-' + w);
+        if (badge) badge.textContent = rpmAct[i].toFixed(1) + ' RPM';
+      });
     }
 
-    function pushVelocityData(vSet, vAct) {
-      if (!velCharts) return;
-      pushToChart(velCharts.FL, vSet[0], vAct[0]);
-      pushToChart(velCharts.FR, vSet[1], vAct[1]);
-      pushToChart(velCharts.RL, vSet[2], vAct[2]);
-      pushToChart(velCharts.RR, vSet[3], vAct[3]);
-      tick++;
-    }
-
-    function pushPositionData(pSet, pAct) {
-      if (!posCharts) return;
-      pushToChart(posCharts.FL, pSet[0], pAct[0]);
-      pushToChart(posCharts.FR, pSet[1], pAct[1]);
-      pushToChart(posCharts.RL, pSet[2], pAct[2]);
-      pushToChart(posCharts.RR, pSet[3], pAct[3]);
-    }
-
+    // ── Controls ──
     function clearCharts() {
-      [...Object.values(velCharts), ...Object.values(posCharts)].forEach(c => {
+      Object.values(rpmCharts).forEach(c => {
         if (!c) return;
         c.data.labels = [];
         c.data.datasets.forEach(ds => ds.data = []);
         c.update('none');
       });
-      tick = 0;
+      elapsedMs = 0;
+      ['FL','FR','RL','RR'].forEach(w => {
+        const badge = document.getElementById('rpm-now-' + w);
+        if (badge) badge.textContent = '0 RPM';
+      });
     }
 
     function setBuf(n) {
@@ -968,21 +759,6 @@
       document.querySelectorAll('.buf-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('buf-' + n).classList.add('active');
     }
-
-    function setPlotTab(name) {
-      document.querySelectorAll('.plot-panel').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.plot-tab-btn').forEach(b => b.classList.remove('active'));
-      document.getElementById('pp-' + name).classList.add('active');
-      const btns = document.querySelectorAll('.plot-tab-btn');
-      const names = ['velocity', 'position'];
-      btns[names.indexOf(name)].classList.add('active');
-      // Resize after the newly visible panel is painted
-      requestAnimationFrame(() => {
-        const charts = name === 'velocity' ? velCharts : posCharts;
-        Object.values(charts).forEach(c => { if (c) c.resize(); });
-      });
-    }
   </script>
 </body>
-
 </html>

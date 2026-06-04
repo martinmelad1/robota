@@ -1,38 +1,51 @@
 #ifndef SERVO_CONTROL_H
 #define SERVO_CONTROL_H
-
 #include <Arduino.h>
 #include <ESP32Servo.h>
 
+// ── Arm pose (absolute joint angles) ─────────────────────────
+struct ArmPose
+{
+    int j1, j2, j3;
+};
+
+// ── IK pose cache ─────────────────────────────────────────────
+// Populated by Arm_IK.cpp before a DropSequenceCmd is queued.
+// The drop state machine reads this instead of hardcoded angles.
+struct IKPoseCache
+{
+    ArmPose pick; // Gripper-close position (over storage slot)
+    ArmPose drop; // Gripper-open  position (over drop zone)
+    ArmPose fold; // Compact rest  position (after release)
+    bool valid = false;
+};
+extern IKPoseCache gIKCache;
 // ── Servo pin assignments ─────────────────────────────────────
 // Avoid pins 12,13,14,15 (conflict with JTAG)
-#define SERVO_1_PIN    33
-#define SERVO_2_PIN    25
-#define SERVO_3_PIN    26
+#define SERVO_1_PIN 33
+#define SERVO_2_PIN 25
+#define SERVO_3_PIN 26
 #define SERVO_GRIP_PIN 27
 
 // ── Physical joint limits (degrees) ──────────────────────────
 // Adjust if servo hits a hard stop and jitters
-#define SERVO_MIN_ANGLE_J1       0
-#define SERVO_MAX_ANGLE_J1     180
-#define SERVO_MIN_ANGLE_J2       0
-#define SERVO_MAX_ANGLE_J2      50
-#define SERVO_MIN_ANGLE_J3       0
-#define SERVO_MAX_ANGLE_J3     130
-#define SERVO_MIN_ANGLE_GRIPPER  0
+#define SERVO_MIN_ANGLE_J1 0
+#define SERVO_MAX_ANGLE_J1 180
+#define SERVO_MIN_ANGLE_J2 0
+#define SERVO_MAX_ANGLE_J2 50
+#define SERVO_MIN_ANGLE_J3 0
+#define SERVO_MAX_ANGLE_J3 130
+#define SERVO_MIN_ANGLE_GRIPPER 0
 #define SERVO_MAX_ANGLE_GRIPPER 150
 
 // ── Gripper fixed positions (degrees) ────────────────────────
-#define GRIP_ANGLE_OPEN  60
-#define GRIP_ANGLE_CLOSE 150   // clamped to SERVO_MAX_ANGLE_GRIPPER
-#define GRIP_ANGLE_PICK  90
-
-// ── Arm pose (absolute joint angles) ─────────────────────────
-struct ArmPose { int j1, j2, j3; };
+#define GRIP_ANGLE_OPEN 60
+#define GRIP_ANGLE_CLOSE 150 // clamped to SERVO_MAX_ANGLE_GRIPPER
+#define GRIP_ANGLE_PICK 90
 
 // ── Home / rest position ──────────────────────────────────────
-#define ARM_HOME_J1  90
-#define ARM_HOME_J2  50
+#define ARM_HOME_J1 90
+#define ARM_HOME_J2 50
 #define ARM_HOME_J3 130
 
 // ═══════════════════════════════════════════════════════════════
@@ -50,59 +63,32 @@ struct ArmPose { int j1, j2, j3; };
 //  note the angles printed in Serial Monitor, then paste them here.
 // ═══════════════════════════════════════════════════════════════
 
-// Red slot (box stored on LEFT side of robot)
-#define SLOT_RED_J1   45    // ← ADJUST
-#define SLOT_RED_J2   40    // ← ADJUST  (max 50)
-#define SLOT_RED_J3  110    // ← ADJUST  (max 130)
-
-// Blue slot (box stored in CENTRE)
-#define SLOT_BLUE_J1  90    // ← ADJUST
-#define SLOT_BLUE_J2  40    // ← ADJUST
-#define SLOT_BLUE_J3 110    // ← ADJUST
-
-// Green slot (box stored on RIGHT side of robot)
-#define SLOT_GREEN_J1 135   // ← ADJUST
-#define SLOT_GREEN_J2  40   // ← ADJUST
-#define SLOT_GREEN_J3 110   // ← ADJUST
-
-// Red drop position (arm extended toward red zone opening)
-#define DROP_RED_J1   45    // ← ADJUST
-#define DROP_RED_J2   20    // ← ADJUST
-#define DROP_RED_J3   80    // ← ADJUST
-
-// Blue drop position
-#define DROP_BLUE_J1  90    // ← ADJUST
-#define DROP_BLUE_J2  20    // ← ADJUST
-#define DROP_BLUE_J3  80    // ← ADJUST
-
-// Green drop position
-#define DROP_GREEN_J1 135   // ← ADJUST
-#define DROP_GREEN_J2  20   // ← ADJUST
-#define DROP_GREEN_J3  80   // ← ADJUST
-
 // ── Drop sequence timing (milliseconds) ──────────────────────
 // Increase if the arm doesn't reach position before the next step.
-#define DROP_TIME_GOTO_SLOT   1800   // travel time to storage slot
-#define DROP_TIME_GRIP_CLOSE   700   // time to close gripper on box
-#define DROP_TIME_GOTO_DROP   1800   // travel time to drop position
-#define DROP_TIME_GRIP_OPEN    600   // time gripper is open before returning
-#define DROP_TIME_RETURN_HOME 1800   // travel time back to home pose
-// Total ≈ 6700 ms  — BASE waits 8000 ms (see StateMachine.cpp)
+#define DROP_TIME_GOTO_SLOT 1800   // travel time to pick position
+#define DROP_TIME_GRIP_CLOSE 700   // time to close gripper on box
+#define DROP_TIME_GOTO_DROP 1800   // travel time to drop position
+#define DROP_TIME_GRIP_OPEN 600    // time gripper is open before folding
+#define DROP_TIME_GOTO_FOLD 1200   // travel time to folded rest pose
+#define DROP_TIME_RETURN_HOME 1800 // travel time back to home pose
+// Total ≈ 7900 ms
 
 // ── Drop sequence trigger (UART slave → Servo task) ──────────
-struct DropSequenceCmd {
-    char color[8];  // "red", "blue", or "green"
+struct DropSequenceCmd
+{
+    char color[8]; // "red", "blue", or "green"
 };
 extern QueueHandle_t dropSeqMailbox;
 
 // Queue a full pick-from-slot + drop + return-home sequence.
 // Called by UART_Slave_Arm when BASE sends REACHED:<color>.
-void Servo_QueueDropSequence(const char* color);
+void Servo_QueueDropSequence(const char *color);
 
 // ── Standard servo command (dashboard / manual control) ──────
-struct ServoCommand {
-    int joint_id;   // 1–3 for arm joints, 5 for gripper sweep, 6 for gripper instant
-    int direction;  // 1 = increase angle, -1 = decrease, 0 = stop, 2 = PICK preset
+struct ServoCommand
+{
+    int joint_id;  // 1–3 for arm joints, 5 for gripper sweep, 6 for gripper instant
+    int direction; // 1 = increase angle, -1 = decrease, 0 = stop, 2 = PICK preset
 };
 
 // ── Queue handles ─────────────────────────────────────────────

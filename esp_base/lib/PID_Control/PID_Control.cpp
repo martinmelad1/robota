@@ -10,10 +10,10 @@ extern QueueHandle_t pidMailbox;
 // ==========================================
 // 1. HARDWARE PINS  (DO NOT CHANGE)
 // ==========================================
-static const int PWM_FL = 12, DIR_A_FL = 14, DIR_B_FL = 25;
+static const int PWM_FL = 12, DIR_A_FL = 32, DIR_B_FL = 27;
 static const int ENC_A_FL = 35, ENC_B_FL = 36;
 
-static const int PWM_FR = 26, DIR_A_FR = 32, DIR_B_FR = 27;
+static const int PWM_FR = 26, DIR_A_FR = 14, DIR_B_FR = 25;
 static const int ENC_A_FR = 34, ENC_B_FR = 39;
 
 static const int PWM_RL = 33, DIR_A_RL = 13, DIR_B_RL = 15;
@@ -44,6 +44,14 @@ float speedToTicks(float speed_ms)
 volatile long ticksFL = 0, ticksFR = 0, ticksRL = 0, ticksRR = 0;
 portMUX_TYPE tickMux = portMUX_INITIALIZER_UNLOCKED;
 
+// ── Velocity tracking (snapshotted under tickMux each PID call) ──
+// Written only inside portENTER_CRITICAL(&tickMux) in PID_Compute(),
+// read under the same lock in PID_GetTelemetry / PID_GetActualSpeeds.
+// NOT volatile — these are task-to-task, not ISR-shared.
+static float g_velActFL = 0, g_velActFR = 0, g_velActRL = 0, g_velActRR = 0;
+static float g_velSetFL = 0, g_velSetFR = 0, g_velSetRL = 0, g_velSetRR = 0;
+static long  g_prevFL = 0,   g_prevFR = 0,   g_prevRL = 0,   g_prevRR = 0;
+
 volatile int global_dirRL = 1;
 
 void IRAM_ATTR isrFL_A() { portENTER_CRITICAL_ISR(&tickMux); ticksFL += (digitalRead(ENC_B_FL) == LOW) ? +1 : -1; portEXIT_CRITICAL_ISR(&tickMux); }
@@ -73,16 +81,24 @@ void PID_SetGains(int /*mode*/, int /*wheel*/, float /*Kp*/, float /*Ki*/, float
 
 void PID_GetActualSpeeds(double *fl, double *fr, double *rl, double *rr)
 {
-    if (fl) *fl = 0;
-    if (fr) *fr = 0;
-    if (rl) *rl = 0;
-    if (rr) *rr = 0;
+    portENTER_CRITICAL(&tickMux);
+    float aFL = g_velActFL, aFR = g_velActFR;
+    float aRL = g_velActRL, aRR = g_velActRR;
+    portEXIT_CRITICAL(&tickMux);
+    if (fl) *fl = (double)aFL;
+    if (fr) *fr = (double)aFR;
+    if (rl) *rl = (double)aRL;
+    if (rr) *rr = (double)aRR;
 }
 
 void PID_GetTelemetry(PIDTelemetry &t)
 {
-    t.velSetFL = t.velSetFR = t.velSetRL = t.velSetRR = 0;
-    t.velActFL = t.velActFR = t.velActRL = t.velActRR = 0;
+    portENTER_CRITICAL(&tickMux);
+    t.velSetFL = g_velSetFL; t.velSetFR = g_velSetFR;
+    t.velSetRL = g_velSetRL; t.velSetRR = g_velSetRR;
+    t.velActFL = g_velActFL; t.velActFR = g_velActFR;
+    t.velActRL = g_velActRL; t.velActRR = g_velActRR;
+    portEXIT_CRITICAL(&tickMux);
     for (int i = 0; i < 4; i++) t.velGains[i] = {0, 0, 0};
 }
 
@@ -145,6 +161,29 @@ void PID_Compute(float Vx, float Vy, float Wz)
 
     if (tRL > 0.1)       global_dirRL =  1;
     else if (tRL < -0.1) global_dirRL = -1;
+
+    // ── Snapshot tick counts + compute actuals + store setpoints atomically ──
+    // All done under tickMux so Core-0 readers (telemetry) see a consistent
+    // snapshot and can never read a half-written float.
+    long curFL, curFR, curRL, curRR;
+    portENTER_CRITICAL(&tickMux);
+    curFL = ticksFL; curFR = ticksFR;
+    curRL = ticksRL; curRR = ticksRR;
+
+    g_velActFL = (float)(curFL - g_prevFL);
+    g_velActFR = (float)(curFR - g_prevFR);
+    g_velActRL = (float)(curRL - g_prevRL);
+    g_velActRR = (float)(curRR - g_prevRR);
+
+    g_prevFL = curFL; g_prevFR = curFR;
+    g_prevRL = curRL; g_prevRR = curRR;
+
+    // Record setpoints inside same lock so reads are always paired
+    g_velSetFL = (float)tFL;
+    g_velSetFR = (float)tFR;
+    g_velSetRL = (float)tRL;
+    g_velSetRR = (float)tRR;
+    portEXIT_CRITICAL(&tickMux);
 
     double targets[4] = {tFL, tFR, tRL, tRR};
     for (int i = 0; i < 4; i++)
