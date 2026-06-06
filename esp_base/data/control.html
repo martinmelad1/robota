@@ -1,0 +1,1202 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Robot Control</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: sans-serif;
+      background: #0f1117;
+      color: #e2e8f0;
+      padding: 12px;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .header h1 {
+      font-size: 16px;
+      color: #a78bfa;
+    }
+
+    #conn {
+      font-size: 11px;
+    }
+
+    .connected {
+      color: #34d399;
+    }
+
+    .disconnected {
+      color: #ef4444;
+    }
+
+    .estop {
+      width: 100%;
+      padding: 14px;
+      background: #450a0a;
+      border: 2px solid #ef4444;
+      border-radius: 12px;
+      color: #ef4444;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .estop:active {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .mode-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .mode-btn {
+      padding: 10px 4px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 1px solid;
+      transition: all 0.15s;
+    }
+
+    .mode-manual {
+      background: #0f1a2e;
+      border-color: #2c4a7a;
+      color: #60a5fa;
+    }
+
+    .mode-manual.active {
+      background: #1a3a6a;
+      border-color: #60a5fa;
+      color: #fff;
+    }
+
+    .mode-auto {
+      background: #0f2a1a;
+      border-color: #1a5a30;
+      color: #34d399;
+    }
+
+    .mode-auto.active {
+      background: #1a4a2a;
+      border-color: #34d399;
+      color: #fff;
+    }
+
+    .mode-pick {
+      background: #1a0f2e;
+      border-color: #6d28d9;
+      color: #a78bfa;
+    }
+
+    .mode-pick.active {
+      background: #2e1a5e;
+      border-color: #a78bfa;
+      color: #fff;
+    }
+
+    .mode-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .badge-manual {
+      background: #1a3a6a;
+      color: #60a5fa;
+    }
+
+    .badge-auto {
+      background: #1a4a2a;
+      color: #34d399;
+    }
+
+    .badge-pick {
+      background: #2e1a5e;
+      color: #a78bfa;
+    }
+
+    .sec-label {
+      font-size: 10px;
+      color: #7c83a0;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+      margin-top: 10px;
+    }
+
+    /* ── SPEED CONTROL ── */
+    .speed-card {
+      background: #13111f;
+      border: 1px solid #2d2050;
+      border-radius: 12px;
+      padding: 14px;
+      margin-bottom: 8px;
+    }
+
+    .speed-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .speed-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 2px;
+    }
+
+    .speed-value-badge {
+      font-size: 18px;
+      font-weight: 700;
+      color: #34d399;
+      font-family: 'Courier New', monospace;
+      min-width: 60px;
+      text-align: right;
+    }
+
+    .speed-unit {
+      font-size: 10px;
+      color: #7c83a0;
+    }
+
+    .speed-slider-wrap {
+      position: relative;
+      margin-bottom: 10px;
+    }
+
+    .speed-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 6px;
+      border-radius: 3px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .speed-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #a78bfa;
+      cursor: pointer;
+      border: 3px solid #0f1117;
+      box-shadow: 0 0 8px #a78bfa88;
+    }
+
+    .speed-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 9px;
+      color: #7c83a0;
+      margin-top: 4px;
+      padding: 0 2px;
+    }
+
+    .speed-presets {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+      margin-top: 8px;
+    }
+
+    .preset-btn {
+      padding: 8px 4px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 1px solid;
+      transition: all 0.12s;
+      letter-spacing: 1px;
+    }
+
+    .preset-btn.p25 {
+      background: #0a1525;
+      border-color: #1e3a6a;
+      color: #60a5fa;
+    }
+
+    .preset-btn.p50 {
+      background: #0f2a1a;
+      border-color: #1a5a30;
+      color: #34d399;
+    }
+
+    .preset-btn.p75 {
+      background: #2a1a08;
+      border-color: #5a3a10;
+      color: #fb923c;
+    }
+
+    .preset-btn.p100 {
+      background: #2a0808;
+      border-color: #6a1a1a;
+      color: #ef4444;
+    }
+
+    .preset-btn.active {
+      filter: brightness(1.6);
+      transform: scale(0.96);
+    }
+
+    .speed-apply-btn {
+      width: 100%;
+      margin-top: 10px;
+      padding: 11px;
+      background: #1a0f30;
+      border: 1.5px solid #a78bfa;
+      border-radius: 9px;
+      color: #a78bfa;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.15s;
+    }
+
+    .speed-apply-btn:active {
+      background: #a78bfa;
+      color: #000;
+    }
+
+    .dpad {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(3, 68px);
+      gap: 5px;
+      margin-bottom: 4px;
+    }
+
+    .btn {
+      background: #1e2130;
+      border: 1px solid #2d3150;
+      border-radius: 10px;
+      color: #e2e8f0;
+      font-size: 22px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 2px;
+      cursor: pointer;
+      touch-action: none;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn span.lbl {
+      font-size: 9px;
+      color: #7c83a0;
+    }
+
+    .btn.active {
+      background: #a78bfa;
+      transform: scale(0.92);
+    }
+
+    .btn.diag {
+      background: #161825;
+      border-color: #252840;
+      color: #7c83a0;
+      font-size: 18px;
+    }
+
+    .btn.diag.active {
+      background: #534AB7;
+      color: #fff;
+    }
+
+    .btn.stop-center {
+      background: #450a0a;
+      border: 1px solid #ef4444;
+      color: #ef4444;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .btn.stop-center.active {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .btn-rot {
+      background: #1e2130;
+      border: 1px solid #2d3150;
+      border-radius: 10px;
+      color: #a78bfa;
+      font-size: 14px;
+      padding: 12px 6px;
+      text-align: center;
+      cursor: pointer;
+      touch-action: none;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-rot.active {
+      background: #a78bfa;
+      color: #fff;
+      transform: scale(0.93);
+    }
+
+    .joint-row {
+      display: grid;
+      grid-template-columns: 36px 1fr 1fr;
+      gap: 5px;
+      align-items: stretch;
+      margin-bottom: 6px;
+    }
+
+    .joint-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #7c83a0;
+      text-align: center;
+      background: #1e2130;
+      border-radius: 6px;
+      padding: 6px 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-arm {
+      background: #0f2a1a;
+      border: 2px solid #34d399;
+      border-radius: 10px;
+      color: #34d399;
+      font-size: 20px;
+      padding: 18px 6px;
+      cursor: pointer;
+      touch-action: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 3px;
+      transition: background 0.08s, transform 0.08s;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn-arm .lbl {
+      font-size: 9px;
+      color: #34d399;
+    }
+
+    .btn-arm.active {
+      background: #34d399;
+      color: #000;
+      transform: scale(0.95);
+    }
+
+    .btn-arm.active .lbl {
+      color: #000;
+    }
+
+    .gripper-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    .btn-grip {
+      padding: 16px 6px;
+      border-radius: 12px;
+      font-size: 22px;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 2px solid;
+      transition: all 0.12s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn-grip .glbl {
+      font-size: 9px;
+      font-weight: 400;
+      opacity: 0.8;
+    }
+
+    .grip-open {
+      background: #0f1a2e;
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .grip-open:active {
+      background: #60a5fa;
+      color: #000;
+    }
+
+    .grip-close {
+      background: #1a0f2e;
+      border-color: #a78bfa;
+      color: #a78bfa;
+    }
+
+    .grip-close:active {
+      background: #a78bfa;
+      color: #000;
+    }
+
+    .grip-pick {
+      background: #0f2a1a;
+      border-color: #34d399;
+      color: #34d399;
+    }
+
+    .grip-pick:active {
+      background: #34d399;
+      color: #000;
+    }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #1e2130;
+      margin: 10px 0;
+    }
+
+    /* ── PID SECTION ── */
+    .pid-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      margin-top: 10px;
+      background: #13111f;
+      border: 1px solid #2d2050;
+      border-radius: 10px;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .pid-header:active {
+      background: #1e1a35;
+    }
+
+    .pid-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pid-header-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #a78bfa;
+      letter-spacing: 1px;
+    }
+
+    .pid-header-sub {
+      font-size: 9px;
+      color: #7c83a0;
+      margin-top: 1px;
+    }
+
+    .pid-chevron {
+      font-size: 16px;
+      color: #a78bfa;
+      transition: transform 0.2s;
+    }
+
+    .pid-chevron.open {
+      transform: rotate(180deg);
+    }
+
+    .pid-body {
+      display: none;
+      background: #0e0d1a;
+      border: 1px solid #2d2050;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      padding: 14px 12px;
+    }
+
+    .pid-body.open {
+      display: block;
+    }
+
+    .pid-wheels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .pid-wheel {
+      background: #13111f;
+      border: 1px solid #252240;
+      border-radius: 8px;
+      padding: 10px;
+    }
+
+    .pid-wheel-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      margin-bottom: 8px;
+      padding-bottom: 6px;
+      border-bottom: 1px solid #1e1c35;
+    }
+
+    .pid-wheel.fl .pid-wheel-title {
+      color: #34d399;
+    }
+
+    .pid-wheel.fr .pid-wheel-title {
+      color: #60a5fa;
+    }
+
+    .pid-wheel.rl .pid-wheel-title {
+      color: #fb923c;
+    }
+
+    .pid-wheel.rr .pid-wheel-title {
+      color: #a78bfa;
+    }
+
+    .gain-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 7px;
+    }
+
+    .gain-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      color: #7c83a0;
+      width: 20px;
+      flex-shrink: 0;
+    }
+
+    .gain-slider {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      background: #252240;
+      min-width: 0;
+    }
+
+    .gain-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: 2px solid #0e0d1a;
+    }
+
+    .pid-wheel.fl .gain-slider::-webkit-slider-thumb {
+      background: #34d399;
+    }
+
+    .pid-wheel.fr .gain-slider::-webkit-slider-thumb {
+      background: #60a5fa;
+    }
+
+    .pid-wheel.rl .gain-slider::-webkit-slider-thumb {
+      background: #fb923c;
+    }
+
+    .pid-wheel.rr .gain-slider::-webkit-slider-thumb {
+      background: #a78bfa;
+    }
+
+    .gain-num {
+      width: 56px;
+      flex-shrink: 0;
+      background: #0a0916;
+      border: 1px solid #3a3260;
+      border-radius: 5px;
+      color: #e2e8f0;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 5px 4px;
+      text-align: right;
+      user-select: text !important;
+      -webkit-user-select: text !important;
+      touch-action: manipulation;
+    }
+
+    .gain-num:focus {
+      outline: 2px solid #60a5fa;
+      border-color: #60a5fa;
+    }
+
+    .apply-wheel-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 7px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      touch-action: manipulation;
+      border: 1px solid;
+      transition: all 0.15s;
+    }
+
+    .pid-wheel.fl .apply-wheel-btn {
+      background: #082a18;
+      border-color: #34d399;
+      color: #34d399;
+    }
+
+    .pid-wheel.fr .apply-wheel-btn {
+      background: #0a1a30;
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .pid-wheel.rl .apply-wheel-btn {
+      background: #2a1408;
+      border-color: #fb923c;
+      color: #fb923c;
+    }
+
+    .pid-wheel.rr .apply-wheel-btn {
+      background: #180a2e;
+      border-color: #a78bfa;
+      color: #a78bfa;
+    }
+
+    .apply-wheel-btn:active {
+      filter: brightness(1.5);
+      transform: scale(0.97);
+    }
+
+    .apply-all-btn {
+      width: 100%;
+      padding: 12px;
+      background: #082a18;
+      border: 2px solid #34d399;
+      border-radius: 10px;
+      color: #34d399;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.15s;
+    }
+
+    .apply-all-btn:active {
+      background: #34d399;
+      color: #000;
+    }
+
+    .sync-robot-btn {
+      width: 100%;
+      margin-top: 8px;
+      padding: 10px;
+      background: #0a0916;
+      border: 1px solid #3a3260;
+      border-radius: 10px;
+      color: #7c83a0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      touch-action: manipulation;
+      transition: all 0.15s;
+    }
+
+    .sync-robot-btn:active {
+      border-color: #60a5fa;
+      color: #60a5fa;
+    }
+
+    .pid-toast {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #082a18;
+      border: 1px solid #34d399;
+      color: #34d399;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 20px;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 999;
+      letter-spacing: 1px;
+    }
+
+    .pid-toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="header">
+    <h1>Robot Control</h1>
+    <span id="conn" class="disconnected">● Connecting...</span>
+  </div>
+
+  <button class="estop" onpointerdown="emergencyStop()">&#9632; EMERGENCY STOP</button>
+
+  <div class="mode-row">
+    <div class="mode-btn mode-manual active" id="btn-manual" onpointerdown="setMode('MANUAL')">&#9632; Manual</div>
+    <div class="mode-btn mode-auto" id="btn-auto" onpointerdown="setMode('AUTO')">&#9654; Auto</div>
+    <div class="mode-btn mode-pick" id="btn-pick" onpointerdown="setMode('PICK')">&#x1F4E6; Auto Pick</div>
+  </div>
+  <div id="mode-badge" class="mode-badge badge-manual">MANUAL MODE</div>
+
+  <hr class="divider">
+
+  <div class="sec-label">Speed Control</div>
+  <div class="speed-card">
+    <div class="speed-header">
+      <span class="speed-title">&#x26A1; DRIVE SPEED</span>
+      <span>
+        <span class="speed-value-badge" id="spd-display">0.50</span>
+        <span class="speed-unit"> m/s</span>
+      </span>
+    </div>
+
+    <div class="speed-slider-wrap">
+      <input class="speed-slider" id="spd-slider" type="range" min="0.1" max="1.5" step="0.05" value="0.5"
+        oninput="onSpeedSlider(this.value)">
+      <div class="speed-ticks">
+        <span>0.1</span><span>0.4</span><span>0.8</span><span>1.1</span><span>1.5</span>
+      </div>
+    </div>
+
+    <div class="speed-presets">
+      <div class="preset-btn p25" onpointerdown="setSpeedPreset(0.30)">SLOW<br>0.3</div>
+      <div class="preset-btn p50" onpointerdown="setSpeedPreset(0.50)">MED<br>0.5</div>
+      <div class="preset-btn p75" onpointerdown="setSpeedPreset(0.90)">FAST<br>0.9</div>
+      <div class="preset-btn p100" onpointerdown="setSpeedPreset(1.50)">MAX<br>1.5</div>
+    </div>
+
+    <button class="speed-apply-btn" id="spd-apply" onpointerdown="applySpeed()">
+      &#x25B6; SET SPEED
+    </button>
+  </div>
+
+  <hr class="divider">
+  <div class="sec-label">Distance Move (Auto-Stop)</div>
+  <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+    <input type="number" id="dist-val" value="0.5" step="0.1" min="0.1"
+      style="flex: 1; background: #13111f; color: #a78bfa; border: 1px solid #2d2050; border-radius: 8px; padding: 10px; font-family: monospace; font-size: 14px;">
+    <button id="btn-dist-mode"
+      style="padding: 10px 16px; background: #1e2130; border: 1px solid #2d3150; border-radius: 8px; color: #7c83a0; font-weight: bold; cursor: pointer; transition: 0.2s;"
+      onclick="toggleDistMode()">ENABLE</button>
+  </div>
+
+  <div class="sec-label">Movement — press once to start, release to stop</div>
+  <div class="dpad">
+    <div class="btn diag" id="mv-fl">&#x2196;<span class="lbl">fwd-left</span></div>
+    <div class="btn" id="mv-fw">&#x25B2;<span class="lbl">forward</span></div>
+    <div class="btn diag" id="mv-fr">&#x2197;<span class="lbl">fwd-right</span></div>
+    <div class="btn" id="mv-ll">&#x25C4;<span class="lbl">strafe L</span></div>
+    <div class="btn stop-center" id="mv-st">STOP</div>
+    <div class="btn" id="mv-rr">&#x25BA;<span class="lbl">strafe R</span></div>
+    <div class="btn diag" id="mv-bl">&#x2199;<span class="lbl">bwd-left</span></div>
+    <div class="btn" id="mv-bw">&#x25BC;<span class="lbl">backward</span></div>
+    <div class="btn diag" id="mv-br">&#x2198;<span class="lbl">bwd-right</span></div>
+  </div>
+
+  <div class="sec-label">Rotation — press once to start, release to stop</div>
+  <div class="two-col">
+    <div class="btn-rot" id="rot-l">&#x21BA; Rotate Left</div>
+    <div class="btn-rot" id="rot-r">&#x21BB; Rotate Right</div>
+  </div>
+
+  <hr class="divider">
+  <div class="sec-label">Arm — press once to move, release to stop</div>
+  <div class="joint-row">
+    <div class="joint-label">J1</div>
+    <div class="btn-arm" id="j1up">&#x21BA;<span class="lbl">CCW</span></div>
+    <div class="btn-arm" id="j1dn">&#x21BB;<span class="lbl">CW</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label">J2</div>
+    <div class="btn-arm" id="j2up">&#x25B2;<span class="lbl">Up</span></div>
+    <div class="btn-arm" id="j2dn">&#x25BC;<span class="lbl">Down</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label">J3</div>
+    <div class="btn-arm" id="j3up">&#x25B2;<span class="lbl">Up</span></div>
+    <div class="btn-arm" id="j3dn">&#x25BC;<span class="lbl">Down</span></div>
+  </div>
+  <div class="joint-row">
+    <div class="joint-label" style="font-size:9px;">GRIP</div>
+    <div class="btn-arm" id="gripup">&#x1F91C;<span class="lbl">Open</span></div>
+    <div class="btn-arm" id="gripdn">&#x270A;<span class="lbl">Close</span></div>
+  </div>
+
+  <hr class="divider">
+  <div class="sec-label">Gripper — tap to activate</div>
+  <div class="gripper-row">
+    <div class="btn-grip grip-open" onpointerdown="send('GRIP_TAP_OPEN')">&#x1F91C;<span class="glbl">Open</span></div>
+    <div class="btn-grip grip-close" onpointerdown="send('GRIP_TAP_CLOSE')">&#x270A;<span class="glbl">Close</span>
+    </div>
+    <div class="btn-grip grip-pick" onpointerdown="send('GRIP_TAP_PICK')">&#x1F4E6;<span class="glbl">Pick</span></div>
+  </div>
+
+  <div class="pid-header" id="pid-header" onpointerdown="togglePID()">
+    <div class="pid-header-left">
+      <span style="font-size:16px">&#9881;</span>
+      <div>
+        <div class="pid-header-title">PID TUNING</div>
+        <div class="pid-header-sub">Tap to expand — Velocity gains</div>
+      </div>
+    </div>
+    <span class="pid-chevron" id="pid-chevron">&#x2303;</span>
+  </div>
+
+  <div class="pid-body" id="pid-body">
+    <div class="pid-wheels" id="pid-wheels-container">
+    </div>
+
+    <button class="apply-all-btn" onpointerdown="applyAll()">&#x21BA; APPLY ALL WHEELS</button>
+    <button class="sync-robot-btn" onpointerdown="syncFromRobot()">&#x21C4; SYNC FROM ROBOT</button>
+  </div>
+
+  <div style="height:30px"></div>
+  <div class="pid-toast" id="pid-toast"></div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════
+    // WEBSOCKET
+    // ══════════════════════════════════════════════════════════
+    const ESP32_IP = "192.168.4.1";
+    const connEl = document.getElementById("conn");
+    let ws, lastTelemetry = {};
+
+    function wsConnect() {
+      ws = new WebSocket("ws://" + ESP32_IP + "/ws");
+      ws.onopen = () => { connEl.textContent = "● Connected"; connEl.className = "connected"; };
+      ws.onclose = () => { connEl.textContent = "● Disconnected"; connEl.className = "disconnected"; setTimeout(wsConnect, 2000); };
+      ws.onmessage = e => {
+        try {
+          const d = JSON.parse(e.data);
+          lastTelemetry = d;
+          if (!gainsLoadedFromRobot) {
+            if (d.velGains) loadGainsFromRobot(d.velGains);
+            if (d.velGains) gainsLoadedFromRobot = true;
+          }
+          if (d.driveSpeed !== undefined) updateSpeedDisplay(d.driveSpeed);
+        } catch (_) { }
+      };
+    }
+    wsConnect();
+
+    function send(cmd) {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(cmd);
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // SPEED CONTROL
+    // ══════════════════════════════════════════════════════════
+    let currentSpeed = 0.50;
+
+    function updateSpeedDisplay(v) {
+      currentSpeed = v;
+      const slider = document.getElementById('spd-slider');
+      const display = document.getElementById('spd-display');
+      slider.value = v;
+      display.textContent = parseFloat(v).toFixed(2);
+      updateSliderTrack(slider);
+      highlightPreset(v);
+    }
+
+    function updateSliderTrack(slider) {
+      const min = parseFloat(slider.min);
+      const max = parseFloat(slider.max);
+      const val = parseFloat(slider.value);
+      const pct = ((val - min) / (max - min)) * 100;
+      slider.style.background = `linear-gradient(to right, #a78bfa ${pct}%, #252240 ${pct}%)`;
+    }
+
+    function onSpeedSlider(val) { updateSpeedDisplay(parseFloat(val)); }
+
+    function setSpeedPreset(v) {
+      updateSpeedDisplay(v);
+      applySpeed();
+    }
+
+    function highlightPreset(v) {
+      document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+      const map = { 0.30: 'p25', 0.50: 'p50', 0.90: 'p75', 1.50: 'p100' };
+      for (const [spd, cls] of Object.entries(map)) {
+        if (Math.abs(parseFloat(spd) - v) < 0.02) {
+          document.querySelector('.' + cls)?.classList.add('active');
+          break;
+        }
+      }
+    }
+
+    function applySpeed() {
+      const v = parseFloat(currentSpeed).toFixed(2);
+      send(`SPEED:${v}`);
+      const btn = document.getElementById('spd-apply');
+      btn.textContent = `✓ SPEED SET TO ${v} m/s`;
+      btn.style.borderColor = '#34d399';
+      btn.style.color = '#34d399';
+      btn.style.background = '#082a18';
+      showToast(`Speed set to ${v} m/s`);
+      setTimeout(() => {
+        btn.textContent = '▶ SET SPEED';
+        btn.style.borderColor = '';
+        btn.style.color = '';
+        btn.style.background = '';
+      }, 1500);
+    }
+
+    updateSliderTrack(document.getElementById('spd-slider'));
+    highlightPreset(0.50);
+
+    // ══════════════════════════════════════════════════════════
+    // EMERGENCY / MODES / DISTANCE
+    // ══════════════════════════════════════════════════════════
+    function emergencyStop() {
+      send("ESTOP");
+      document.body.style.background = "#450a0a";
+      setTimeout(() => { document.body.style.background = "#0f1117"; }, 300);
+    }
+
+    const robotModes = {
+      MANUAL: { btn: "btn-manual", badge: "MANUAL MODE", cls: "badge-manual", cmd: "MODE_MANUAL" },
+      AUTO: { btn: "btn-auto", badge: "AUTONOMOUS MODE", cls: "badge-auto", cmd: "MODE_AUTO" },
+      PICK: { btn: "btn-pick", badge: "AUTO PICK MODE", cls: "badge-pick", cmd: "MODE_PICK" },
+    };
+    function setMode(mode) {
+      Object.keys(robotModes).forEach(k => document.getElementById(robotModes[k].btn).classList.remove("active"));
+      const m = robotModes[mode];
+      document.getElementById(m.btn).classList.add("active");
+      const badge = document.getElementById("mode-badge");
+      badge.textContent = m.badge; badge.className = "mode-badge " + m.cls;
+      send(m.cmd);
+    }
+
+    let distMode = false;
+    function toggleDistMode() {
+      distMode = !distMode;
+      const btn = document.getElementById('btn-dist-mode');
+      btn.style.background = distMode ? '#2e1a5e' : '#1e2130';
+      btn.style.borderColor = distMode ? '#a78bfa' : '#2d3150';
+      btn.style.color = distMode ? '#fff' : '#7c83a0';
+      btn.textContent = distMode ? 'ON' : 'ENABLE';
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // HOLD BUTTONS
+    // ══════════════════════════════════════════════════════════
+    function bindHoldButton(id, pressCmd, releaseCmd) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("pointerdown", e => {
+        e.preventDefault();
+        el.setPointerCapture(e.pointerId);
+        el.classList.add("active");
+
+        if (distMode && pressCmd !== "STOP" && !pressCmd.includes("ROT") && !pressCmd.includes("J") && !pressCmd.includes("GRIP")) {
+          const dist = document.getElementById('dist-val').value;
+          send("MOVE_DIST:" + pressCmd + ":" + dist);
+        } else {
+          send(pressCmd);
+        }
+      });
+      el.addEventListener("pointerup", () => {
+        el.classList.remove("active");
+        if (!distMode || releaseCmd === "ARM_STOP" || pressCmd.includes("ROT")) send(releaseCmd);
+      });
+      el.addEventListener("pointercancel", () => {
+        el.classList.remove("active");
+        if (!distMode || releaseCmd === "ARM_STOP" || pressCmd.includes("ROT")) send(releaseCmd);
+      });
+    }
+
+    bindHoldButton("mv-fl", "FWD_LEFT", "STOP"); bindHoldButton("mv-fw", "FWD", "STOP");
+    bindHoldButton("mv-fr", "FWD_RIGHT", "STOP"); bindHoldButton("mv-ll", "LEFT", "STOP");
+    bindHoldButton("mv-st", "STOP", "STOP"); bindHoldButton("mv-rr", "RIGHT", "STOP");
+    bindHoldButton("mv-bl", "BWD_LEFT", "STOP"); bindHoldButton("mv-bw", "BWD", "STOP");
+    bindHoldButton("mv-br", "BWD_RIGHT", "STOP");
+    bindHoldButton("rot-l", "ROT_L", "STOP"); bindHoldButton("rot-r", "ROT_R", "STOP");
+    bindHoldButton("j1up", "J1_UP", "ARM_STOP"); bindHoldButton("j1dn", "J1_DOWN", "ARM_STOP");
+    bindHoldButton("j2up", "J2_UP", "ARM_STOP"); bindHoldButton("j2dn", "J2_DOWN", "ARM_STOP");
+    bindHoldButton("j3up", "J3_UP", "ARM_STOP"); bindHoldButton("j3dn", "J3_DOWN", "ARM_STOP");
+    bindHoldButton("gripup", "GRIP_OPEN", "ARM_STOP"); bindHoldButton("gripdn", "GRIP_CLOSE", "ARM_STOP");
+
+    // ══════════════════════════════════════════════════════════
+    // PID TUNING (Velocity Only)
+    // ══════════════════════════════════════════════════════════
+    const WHEELS = ['FL', 'FR', 'RL', 'RR'];
+    let pidOpen = false;
+    let gainsLoadedFromRobot = false;
+
+    const gains = {
+      FL: { Kp: 2.5, Ki: 2.0, Kd: 0.0 }, FR: { Kp: 2.5, Ki: 2.0, Kd: 0.0 },
+      RL: { Kp: 2.5, Ki: 2.0, Kd: 0.0 }, RR: { Kp: 2.5, Ki: 2.0, Kd: 0.0 }
+    };
+
+    function buildWheelCards() {
+      const cls = { FL: 'fl', FR: 'fr', RL: 'rl', RR: 'rr' };
+      const container = document.getElementById('pid-wheels-container');
+      container.innerHTML = '';
+      WHEELS.forEach(w => {
+        const card = document.createElement('div');
+        card.className = `pid-wheel ${cls[w]}`;
+        card.id = `pw-${w}`;
+        card.innerHTML = `
+        <div class="pid-wheel-title">${w}</div>
+        ${['Kp', 'Ki', 'Kd'].map(g => `
+          <div class="gain-row">
+            <span class="gain-lbl">${g}</span>
+            <input class="gain-slider" id="sl-${w}-${g}" type="range" min="0" max="10" step="0.05" oninput="onSlider('${w}','${g}',this.value)">
+            <input class="gain-num" id="ni-${w}-${g}" type="number" step="0.01" min="0" oninput="onNumber('${w}','${g}',this.value)">
+          </div>`).join('')}
+        <button class="apply-wheel-btn" onpointerdown="applyWheel('${w}')">APPLY ${w}</button>`;
+        container.appendChild(card);
+      });
+    }
+
+    function reflectGainsToDOM() {
+      WHEELS.forEach(w => {
+        ['Kp', 'Ki', 'Kd'].forEach(g => {
+          const v = gains[w][g];
+          const sl = document.getElementById(`sl-${w}-${g}`);
+          const ni = document.getElementById(`ni-${w}-${g}`);
+          if (sl) sl.value = v;
+          if (ni) ni.value = v;
+        });
+      });
+    }
+
+    function onSlider(wheel, gain, rawVal) {
+      const v = parseFloat(rawVal);
+      if (isNaN(v)) return;
+      gains[wheel][gain] = v;
+      const ni = document.getElementById(`ni-${wheel}-${gain}`);
+      if (ni) ni.value = v;
+    }
+
+    function onNumber(wheel, gain, rawVal) {
+      const v = parseFloat(rawVal);
+      if (isNaN(v) || v < 0) return;
+      gains[wheel][gain] = v;
+      const sl = document.getElementById(`sl-${wheel}-${gain}`);
+      if (sl) sl.value = v;
+    }
+
+    function applyWheel(wheel) {
+      const g = gains[wheel];
+      const kp = parseFloat(g.Kp.toFixed(3));
+      const ki = parseFloat(g.Ki.toFixed(3));
+      const kd = parseFloat(g.Kd.toFixed(3));
+      const cmd = `PID_TUNE:vel:${wheel}:${kp}:${ki}:${kd}`;
+      if (cmd.length > 63) { showToast("CMD TOO LONG"); return; }
+      send(cmd);
+      showToast(`VEL ${wheel}: Kp=${kp} Ki=${ki} Kd=${kd}`);
+    }
+
+    function applyAll() {
+      WHEELS.forEach(w => applyWheel(w));
+      showToast("All VEL gains sent ✓");
+    }
+
+    function loadGainsFromRobot(robotGains) {
+      WHEELS.forEach((w, i) => {
+        if (!robotGains[i]) return;
+        gains[w].Kp = robotGains[i].Kp;
+        gains[w].Ki = robotGains[i].Ki;
+        gains[w].Kd = robotGains[i].Kd;
+      });
+      reflectGainsToDOM();
+    }
+
+    function syncFromRobot() {
+      if (lastTelemetry.velGains) {
+        loadGainsFromRobot(lastTelemetry.velGains);
+        showToast("Synced from robot (VEL)");
+      } else {
+        showToast("No robot data yet");
+      }
+    }
+
+    function togglePID() {
+      pidOpen = !pidOpen;
+      document.getElementById("pid-body").classList.toggle("open", pidOpen);
+      document.getElementById("pid-chevron").classList.toggle("open", pidOpen);
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const t = document.getElementById("pid-toast");
+      t.textContent = msg; t.classList.add("show");
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 2500);
+    }
+
+    buildWheelCards();
+    reflectGainsToDOM();
+  </script>
+</body>
+
+</html>

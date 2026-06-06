@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Dashboard</title>
+  <!-- Chart.js served from LittleFS — loads synchronously before page JS runs -->
+  <script src="/chart.min.js"></script>
+  <style>
+    :root {
+      --bg: #080c14;
+      --surface: #0e1420;
+      --border: #1a2235;
+      --border2: #243050;
+      --text: #c8d8f0;
+      --muted: #4a5878;
+      --green: #00e5a0;
+      --blue: #3d9eff;
+      --purple: #9b72ff;
+      --red: #ff4560;
+      --orange: #ff9f40;
+      --yellow: #ffe030;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: var(--bg);
+      color: var(--text);
+      padding: 16px;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ── */
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .top-bar h1 { font-size: 16px; color: var(--green); letter-spacing: 3px; text-transform: uppercase; }
+    .conn-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+    .dot.on { background: var(--green); }
+
+    /* ── TAB NAV ── */
+    .tab-nav {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: 8px 18px;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+      margin-bottom: -1px;
+    }
+    .tab-btn.active { color: var(--green); border-bottom-color: var(--green); }
+
+    /* ── SECTION HIDE/SHOW ── */
+    .tab-section { display: none; }
+    .tab-section.active { display: block; }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .card h2 { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; }
+
+    /* ── COMMAND / MODE ── */
+    .cmd-box { text-align: center; padding: 16px; }
+    .cmd-val { font-size: 28px; font-weight: 700; letter-spacing: 3px; min-height: 40px; }
+    .cmd-val.moving  { color: var(--green); }
+    .cmd-val.stopped { color: var(--muted); }
+    .cmd-val.estop   { color: var(--red); }
+    .cmd-val.arm     { color: var(--blue); }
+
+    .mode-pill { display: inline-block; padding: 3px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 2px; margin-top: 8px; }
+    .pill-manual { background: #0a1a30; color: var(--blue); }
+    .pill-auto   { background: #082a18; color: var(--green); }
+    .pill-pick   { background: #1a0f30; color: var(--purple); }
+
+    /* ── ARROW GRID ── */
+    .arrow-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 52px);
+      grid-template-rows: repeat(3, 52px);
+      gap: 4px;
+      margin: 0 auto;
+      width: fit-content;
+    }
+    .acell {
+      background: #0e1420;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: var(--border2);
+      transition: all 0.15s;
+    }
+    .acell.active { background: #082a18; border-color: var(--green); color: var(--green); }
+    .acell.center { font-size: 10px; }
+    .acell.center.active { background: #2a0808; border-color: var(--red); color: var(--red); }
+
+    /* ── POS GRID ── */
+    .pos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+    .pos-item { text-align: center; }
+    .pos-lbl  { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .pos-val  { font-size: 22px; font-weight: 700; color: var(--purple); }
+    .pos-unit { font-size: 9px; color: var(--muted); }
+
+    /* ── WHEEL SPEED BARS ── */
+    .wheel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .wheel-box { background: #0a0f1c; border-radius: 6px; padding: 8px; text-align: center; }
+    .wheel-lbl { font-size: 9px; color: var(--muted); margin-bottom: 2px; }
+    .wheel-val { font-size: 16px; color: var(--green); font-weight: 700; }
+    .bar-wrap  { background: #0e1420; border-radius: 2px; height: 4px; margin-top: 4px; }
+    .bar       { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.1s; width: 0%; }
+
+    /* ── JOINT BARS ── */
+    .joint-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .jlbl      { font-size: 10px; color: var(--muted); width: 22px; }
+    .jbar-wrap { flex: 1; background: #0a0f1c; border-radius: 2px; height: 7px; }
+    .jbar      { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.2s; }
+    .jval      { font-size: 11px; color: var(--blue); width: 50px; text-align: right; }
+
+    /* ════════════════════════════════════════════════════
+       PLOTS TAB
+    ════════════════════════════════════════════════════ */
+    .plot-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .plot-ctrl-lbl { font-size: 10px; color: var(--muted); }
+
+    .buf-btn {
+      padding: 4px 10px;
+      font-size: 10px;
+      font-family: 'Courier New', monospace;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.12s;
+    }
+    .buf-btn.active { background: #0a1a30; border-color: var(--blue); color: var(--blue); }
+
+    .clear-btn {
+      padding: 4px 10px;
+      font-size: 10px;
+      font-family: 'Courier New', monospace;
+      background: #2a0808;
+      border: 1px solid var(--red);
+      border-radius: 4px;
+      color: var(--red);
+      cursor: pointer;
+      margin-left: auto;
+    }
+
+    /* 2×2 grid of RPM charts */
+    .rpm-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .plot-box {
+      background: #0a0f1c;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+    }
+
+    .plot-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+
+    .plot-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+
+    .plot-rpm-now {
+      font-size: 10px;
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    /* Fixed-height canvas wrapper so Chart.js always gets a definite height */
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 150px;
+    }
+
+    .chart-wrap canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 14px;
+      margin-top: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--muted); }
+    .legend-dot  { width: 10px; height: 3px; border-radius: 2px; }
+
+    /* ── Y-AXIS LABEL ── */
+    .plot-y-label {
+      font-size: 8px;
+      color: var(--muted);
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      text-align: center;
+      padding-right: 4px;
+      letter-spacing: 1px;
+    }
+
+    .plot-inner {
+      display: flex;
+      gap: 0;
+      align-items: stretch;
+    }
+  </style>
+</head>
+
+<body>
+
+  <div class="top-bar">
+    <h1>&#9632; Robot Dashboard</h1>
+    <div class="conn-row">
+      <div class="dot" id="dot"></div>
+      <span id="conn-text">Connecting...</span>
+    </div>
+  </div>
+
+  <!-- ── TAB NAVIGATION ─────────────────────────────────────── -->
+  <div class="tab-nav">
+    <button class="tab-btn active" onclick="switchTab('telemetry')">Telemetry</button>
+    <button class="tab-btn" onclick="switchTab('plots')">RPM Plots</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB 1 — TELEMETRY
+  ══════════════════════════════════════════════════════════ -->
+  <div id="tab-telemetry" class="tab-section active">
+
+    <div class="card cmd-box">
+      <div class="cmd-val stopped" id="cmd-display">IDLE</div>
+      <div id="mode-pill" class="mode-pill pill-manual">MANUAL MODE</div>
+    </div>
+
+    <div class="card">
+      <h2>Direction</h2>
+      <div class="arrow-grid">
+        <div class="acell" id="a-FL">&#x2196;</div>
+        <div class="acell" id="a-FW">&#x25B2;</div>
+        <div class="acell" id="a-FR">&#x2197;</div>
+        <div class="acell" id="a-LL">&#x25C4;</div>
+        <div class="acell center" id="a-ST">STOP</div>
+        <div class="acell" id="a-RR">&#x25BA;</div>
+        <div class="acell" id="a-BL">&#x2199;</div>
+        <div class="acell" id="a-BW">&#x25BC;</div>
+        <div class="acell" id="a-BR">&#x2198;</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Odometry</h2>
+      <div class="pos-grid">
+        <div class="pos-item">
+          <div class="pos-lbl">X</div>
+          <div class="pos-val" id="px">0.000</div>
+          <div class="pos-unit">m</div>
+        </div>
+        <div class="pos-item">
+          <div class="pos-lbl">Y</div>
+          <div class="pos-val" id="py">0.000</div>
+          <div class="pos-unit">m</div>
+        </div>
+        <div class="pos-item">
+          <div class="pos-lbl">Heading</div>
+          <div class="pos-val" id="hdg">0.0</div>
+          <div class="pos-unit">deg</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Wheel speeds (encoder ticks/sample)</h2>
+      <div class="wheel-grid">
+        <div class="wheel-box">
+          <div class="wheel-lbl">Front-Left</div>
+          <div class="wheel-val" id="fl">0.00</div>
+          <div class="bar-wrap"><div class="bar" id="fl-bar"></div></div>
+        </div>
+        <div class="wheel-box">
+          <div class="wheel-lbl">Front-Right</div>
+          <div class="wheel-val" id="fr">0.00</div>
+          <div class="bar-wrap"><div class="bar" id="fr-bar"></div></div>
+        </div>
+        <div class="wheel-box">
+          <div class="wheel-lbl">Rear-Left</div>
+          <div class="wheel-val" id="rl">0.00</div>
+          <div class="bar-wrap"><div class="bar" id="rl-bar"></div></div>
+        </div>
+        <div class="wheel-box">
+          <div class="wheel-lbl">Rear-Right</div>
+          <div class="wheel-val" id="rr">0.00</div>
+          <div class="bar-wrap"><div class="bar" id="rr-bar"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Arm Joints</h2>
+      <div class="joint-row"><span class="jlbl">J1</span>
+        <div class="jbar-wrap"><div class="jbar" id="j1-bar" style="width:50%"></div></div>
+        <span class="jval" id="j1">90°</span>
+      </div>
+      <div class="joint-row"><span class="jlbl">J2</span>
+        <div class="jbar-wrap"><div class="jbar" id="j2-bar" style="width:50%"></div></div>
+        <span class="jval" id="j2">90°</span>
+      </div>
+      <div class="joint-row"><span class="jlbl">J3</span>
+        <div class="jbar-wrap"><div class="jbar" id="j3-bar" style="width:50%"></div></div>
+        <span class="jval" id="j3">90°</span>
+      </div>
+    </div>
+
+  </div><!-- /tab-telemetry -->
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       TAB 2 — RPM PLOTS
+       4 charts, one per wheel, each showing:
+         Blue  = Simulated (desired / setpoint) RPM
+         Green = Real      (measured / encoder) RPM
+  ══════════════════════════════════════════════════════════ -->
+  <div id="tab-plots" class="tab-section">
+
+    <div class="card" style="padding-bottom:8px;">
+      <div class="plot-controls">
+        <span class="plot-ctrl-lbl">History:</span>
+        <button class="buf-btn active" id="buf-60"  onclick="setBuf(60)">60 pts</button>
+        <button class="buf-btn"        id="buf-120" onclick="setBuf(120)">120 pts</button>
+        <button class="buf-btn"        id="buf-300" onclick="setBuf(300)">300 pts</button>
+        <button class="clear-btn" onclick="clearCharts()">&#x2715; Clear</button>
+      </div>
+    </div>
+
+    <div class="rpm-grid">
+
+      <!-- FL -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">FL &mdash; Front Left</div>
+          <div class="plot-rpm-now" id="rpm-now-FL">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-FL"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+      <!-- FR -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">FR &mdash; Front Right</div>
+          <div class="plot-rpm-now" id="rpm-now-FR">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-FR"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+      <!-- RL -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">RL &mdash; Rear Left</div>
+          <div class="plot-rpm-now" id="rpm-now-RL">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-RL"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+      <!-- RR -->
+      <div class="plot-box">
+        <div class="plot-header">
+          <div class="plot-title">RR &mdash; Rear Right</div>
+          <div class="plot-rpm-now" id="rpm-now-RR">0 RPM</div>
+        </div>
+        <div class="plot-inner">
+          <div class="plot-y-label">RPM</div>
+          <div class="chart-wrap"><canvas id="ch-rpm-RR"></canvas></div>
+        </div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#3d9eff"></div>Simulated
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot" style="background:#00e5a0"></div>Real
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /rpm-grid -->
+  </div><!-- /tab-plots -->
+
+  <script>
+    // ══════════════════════════════════════════════════════════
+    // CONSTANTS & CONVERSION
+    // ══════════════════════════════════════════════════════════
+    // Use the hostname the browser used to load this page — it is always the
+    // correct IP of the ESP32 (AP mode: 192.168.4.1, or STA mode IP).
+    const ESP32_IP = window.location.hostname;
+
+    // PID_Compute is called every 10 ms (PID task: vTaskDelay(10/portTICK_PERIOD_MS))
+    // Encoder PPR = 748 (quadrature, per PID_Control.cpp)
+    // RPM = (ticks_per_sample / PPR) * (60_000 ms/min / sample_ms)
+    const PPR        = 748;
+    const SAMPLE_MS  = 10;
+    const TICKS_TO_RPM = 60000.0 / (PPR * SAMPLE_MS); // ≈ 8.022
+
+    // ══════════════════════════════════════════════════════════
+    // WEBSOCKET
+    // ══════════════════════════════════════════════════════════
+    const dotEl    = document.getElementById("dot");
+    const connText = document.getElementById("conn-text");
+    let   wsConn;
+
+    function connect() {
+      wsConn = new WebSocket("ws://" + ESP32_IP + "/ws");
+      wsConn.onopen  = () => { dotEl.classList.add("on");    connText.textContent = "Connected (" + ESP32_IP + ")"; };
+      wsConn.onclose = () => { dotEl.classList.remove("on"); connText.textContent = "Disconnected — retrying..."; setTimeout(connect, 3000); };
+      wsConn.onerror = () => { /* onclose fires after onerror — no duplicate retry needed */ };
+      wsConn.onmessage = e => {
+        try   { updateAll(JSON.parse(e.data)); }
+        catch  { /* ignore malformed frames */ }
+      };
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // TAB ROUTING
+    // ══════════════════════════════════════════════════════════
+    function switchTab(name) {
+      document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      const idx = ['telemetry', 'plots'].indexOf(name);
+      document.querySelectorAll('.tab-btn')[idx].classList.add('active');
+
+      // Give the browser two paint cycles to lay out the now-visible canvases,
+      // then resize all charts (critical: canvases in display:none have 0-width).
+      if (name === 'plots') {
+        requestAnimationFrame(() => requestAnimationFrame(() => resizeAllCharts()));
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // TELEMETRY UPDATE
+    // ══════════════════════════════════════════════════════════
+    const arrowMap = {
+      "FWD":       "a-FW", "BWD":       "a-BW",
+      "LEFT":      "a-LL", "RIGHT":     "a-RR",
+      "FWD_LEFT":  "a-FL", "FWD_RIGHT": "a-FR",
+      "BWD_LEFT":  "a-BL", "BWD_RIGHT": "a-BR",
+      "STOP": "a-ST",      "IDLE":      "a-ST"
+    };
+
+    function updateAll(d) {
+      // ── Command display ──
+      const cmdEl = document.getElementById("cmd-display");
+      cmdEl.textContent = d.cmd || "IDLE";
+      cmdEl.className = "cmd-val";
+      const cmd = d.cmd || "";
+      if (cmd === "IDLE" || cmd === "STOP" || cmd === "ARM_STOP") cmdEl.classList.add("stopped");
+      else if (cmd === "EMERGENCY STOP")                           cmdEl.classList.add("estop");
+      else if (cmd.startsWith("J") || cmd.startsWith("GRIP"))     cmdEl.classList.add("arm");
+      else                                                         cmdEl.classList.add("moving");
+
+      // ── Mode pill ──
+      const pill = document.getElementById("mode-pill");
+      if      (d.mode === "AUTONOMOUS") { pill.textContent = "AUTONOMOUS"; pill.className = "mode-pill pill-auto"; }
+      else if (d.mode === "PICK")       { pill.textContent = "AUTO PICK";  pill.className = "mode-pill pill-pick"; }
+      else                              { pill.textContent = "MANUAL";     pill.className = "mode-pill pill-manual"; }
+
+      // ── Arrow highlight ──
+      Object.values(arrowMap).forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove("active"); });
+      const ac = arrowMap[d.cmd];
+      if (ac) { const el = document.getElementById(ac); if (el) el.classList.add("active"); }
+
+      // ── Odometry ──
+      document.getElementById("px").textContent  = (d.px  || 0).toFixed(3);
+      document.getElementById("py").textContent  = (d.py  || 0).toFixed(3);
+      document.getElementById("hdg").textContent = (d.hdg || 0).toFixed(1);
+
+      // ── Wheel speed bars (ticks/sample) ──
+      const tickIds = ["fl", "fr", "rl", "rr"];
+      const ticks   = [d.fl || 0, d.fr || 0, d.rl || 0, d.rr || 0];
+      tickIds.forEach((id, i) => {
+        document.getElementById(id).textContent        = ticks[i].toFixed(2);
+        document.getElementById(id + "-bar").style.width = Math.min(Math.abs(ticks[i]) * 100, 100) + "%";
+      });
+
+      // ── Arm joints ──
+      function ab(a) { return Math.min(100, Math.max(0, a / 180 * 100)); }
+      ["j1", "j2", "j3"].forEach(j => {
+        const val = d[j] || 0;
+        document.getElementById(j).textContent         = val.toFixed(1) + "°";
+        document.getElementById(j + "-bar").style.width = ab(val) + "%";
+      });
+
+      // ── RPM plot data ──
+      // Prefer pre-computed rpmSet/rpmAct from firmware.
+      // Fall back to computing from vSet/vAct (ticks/sample) if absent.
+      let rpmSet, rpmAct;
+
+      if (Array.isArray(d.rpmSet) && d.rpmSet.length === 4 &&
+          Array.isArray(d.rpmAct) && d.rpmAct.length === 4) {
+        rpmSet = d.rpmSet;
+        rpmAct = d.rpmAct;
+      } else if (Array.isArray(d.vSet) && d.vSet.length === 4 &&
+                 Array.isArray(d.vAct) && d.vAct.length === 4) {
+        rpmSet = d.vSet.map(v => v * TICKS_TO_RPM);
+        rpmAct = d.vAct.map(v => v * TICKS_TO_RPM);
+      }
+
+      if (rpmSet && rpmAct) {
+        pushRPMData(rpmSet, rpmAct);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // CHART.JS — RPM CHARTS
+    //
+    // Each canvas gets explicit pixel dimensions (width/height attrs)
+    // so Chart.js can size itself correctly even while the parent
+    // tab is display:none at initialisation time.
+    // ══════════════════════════════════════════════════════════
+    let BUF_SIZE  = 60;
+    let elapsedMs = 0;            // running time axis (milliseconds)
+    const BROADCAST_HZ = 10;     // WebSocket broadcast rate from ESP32
+    const MS_PER_TICK  = 1000 / BROADCAST_HZ;
+
+    function makeRPMChart(canvasId) {
+      const canvas = document.getElementById(canvasId);
+      // Explicit pixel size prevents 0×0 measurement while hidden.
+      canvas.width  = 400;
+      canvas.height = 150;
+      const ctx = canvas.getContext('2d');
+      return new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: 'Simulated',
+              data: [],
+              borderColor: '#3d9eff',
+              backgroundColor: 'rgba(61,158,255,0.07)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true
+            },
+            {
+              label: 'Real',
+              data: [],
+              borderColor: '#00e5a0',
+              backgroundColor: 'rgba(0,229,160,0.06)',
+              borderWidth: 1.8,
+              pointRadius: 0,
+              tension: 0.35,
+              fill: true
+            }
+          ]
+        },
+        options: {
+          animation: false,
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(1) + ' RPM'
+              },
+              backgroundColor: '#0e1420',
+              titleColor: '#c8d8f0',
+              bodyColor: '#4a5878',
+              borderColor: '#243050',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              display: true,
+              grid: { color: '#111825' },
+              ticks: {
+                color: '#4a5878',
+                font: { size: 8 },
+                maxTicksLimit: 6,
+                // Show every nth label as "Xs"
+                callback: function(val, idx) {
+                  const lbl = this.getLabelForValue(val);
+                  return lbl;
+                }
+              },
+              title: {
+                display: true,
+                text: 'Time (s)',
+                color: '#4a5878',
+                font: { size: 8 }
+              }
+            },
+            y: {
+              display: true,
+              grid: { color: '#111825' },
+              ticks: { color: '#4a5878', font: { size: 8 }, maxTicksLimit: 5 },
+              title: {
+                display: false  // we use the CSS rotated label instead
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // ── Connect WebSocket FIRST — before chart init ──────────────
+    // Chart.js is loaded from a CDN. If the CDN is unreachable (the
+    // ESP32 AP has no internet), makeRPMChart() would throw and
+    // connect() would never be called, leaving the dot permanently red.
+    // Connecting first guarantees telemetry works regardless of CDN.
+    connect();
+
+    // Initialise all 4 charts immediately (before tab is visible).
+    // Chart.js is served from LittleFS synchronously so it is always
+    // available here — no try/catch needed.
+    const rpmCharts = {
+      FL: makeRPMChart('ch-rpm-FL'),
+      FR: makeRPMChart('ch-rpm-FR'),
+      RL: makeRPMChart('ch-rpm-RL'),
+      RR: makeRPMChart('ch-rpm-RR'),
+    };
+
+    function resizeAllCharts() {
+      Object.values(rpmCharts).forEach(c => { if (c) c.resize(); });
+    }
+
+    // ── Push one frame of RPM data to all 4 charts ──
+    function pushRPMData(rpmSet, rpmAct) {
+      const timeSec = (elapsedMs / 1000).toFixed(1);
+      elapsedMs += MS_PER_TICK;
+
+      const wheels = ['FL', 'FR', 'RL', 'RR'];
+      wheels.forEach((w, i) => {
+        const chart = rpmCharts[w];
+        if (!chart) return;
+
+        const d = chart.data;
+        d.labels.push(timeSec + 's');
+        d.datasets[0].data.push(rpmSet[i]);   // Simulated (blue)
+        d.datasets[1].data.push(rpmAct[i]);   // Real      (green)
+
+        // Trim to buffer size
+        if (d.labels.length > BUF_SIZE) {
+          d.labels.shift();
+          d.datasets[0].data.shift();
+          d.datasets[1].data.shift();
+        }
+
+        chart.update('none');
+
+        // Update live RPM badge (real value)
+        const badge = document.getElementById('rpm-now-' + w);
+        if (badge) badge.textContent = rpmAct[i].toFixed(1) + ' RPM';
+      });
+    }
+
+    // ── Controls ──
+    function clearCharts() {
+      Object.values(rpmCharts).forEach(c => {
+        if (!c) return;
+        c.data.labels = [];
+        c.data.datasets.forEach(ds => ds.data = []);
+        c.update('none');
+      });
+      elapsedMs = 0;
+      ['FL','FR','RL','RR'].forEach(w => {
+        const badge = document.getElementById('rpm-now-' + w);
+        if (badge) badge.textContent = '0 RPM';
+      });
+    }
+
+    function setBuf(n) {
+      BUF_SIZE = n;
+      document.querySelectorAll('.buf-btn').forEach(b => b.classList.remove('active'));
+      document.getElementById('buf-' + n).classList.add('active');
+    }
+  </script>
+</body>
+</html>
