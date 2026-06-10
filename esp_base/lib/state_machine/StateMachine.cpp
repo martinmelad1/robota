@@ -97,13 +97,11 @@ String MasterStateMachine::getTelemetryJSON() {
           String(pid.velActRR, 2) + "],";
 
   // RPM setpoints (simulated / desired)
-  json += "\"rpmSet\":[" + String(rpmSetFL, 1) + "," +
-          String(rpmSetFR, 1) + "," + String(rpmSetRL, 1) + "," +
-          String(rpmSetRR, 1) + "],";
+  json += "\"rpmSet\":[" + String(rpmSetFL, 1) + "," + String(rpmSetFR, 1) +
+          "," + String(rpmSetRL, 1) + "," + String(rpmSetRR, 1) + "],";
   // RPM actuals (real / measured)
-  json += "\"rpmAct\":[" + String(rpmActFL, 1) + "," +
-          String(rpmActFR, 1) + "," + String(rpmActRL, 1) + "," +
-          String(rpmActRR, 1) + "],";
+  json += "\"rpmAct\":[" + String(rpmActFL, 1) + "," + String(rpmActFR, 1) +
+          "," + String(rpmActRL, 1) + "," + String(rpmActRR, 1) + "],";
 
   json += "\"velGains\":[";
   for (int i = 0; i < 4; i++) {

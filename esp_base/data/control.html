@@ -1157,7 +1157,9 @@
     }
 
     function applyAll() {
-      WHEELS.forEach(w => applyWheel(w));
+      WHEELS.forEach((w, i) => {
+        setTimeout(() => applyWheel(w), i * 50);
+      });
       showToast("All VEL gains sent ✓");
     }
 

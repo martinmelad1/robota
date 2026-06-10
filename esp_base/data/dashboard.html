@@ -144,6 +144,73 @@
     .jbar      { height: 100%; background: var(--blue); border-radius: 2px; transition: width 0.2s; }
     .jval      { font-size: 11px; color: var(--blue); width: 50px; text-align: right; }
 
+    /* ── CAMERA / SCAN PANEL ── */
+    .cam-panel { display: none; }
+    .cam-panel.visible { display: block; }
+
+    .cam-feed-wrap {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    .cam-feed-wrap img {
+      width: 100%;
+      max-width: 480px;
+      border-radius: 6px;
+      border: 1px solid var(--border2);
+      display: block;
+      margin: 0 auto;
+    }
+    .cam-status {
+      text-align: center;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 6px 0 2px;
+      transition: color 0.3s;
+    }
+    .cam-status.scanning { color: var(--purple); }
+    .cam-status.found    { color: var(--green); }
+    .cam-status.error    { color: var(--red); }
+
+    /* scan pulse ring on the img when scanning */
+    @keyframes scanPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(155,114,255,0.6); }
+      70%  { box-shadow: 0 0 0 10px rgba(155,114,255,0); }
+      100% { box-shadow: 0 0 0 0 rgba(155,114,255,0); }
+    }
+    .cam-feed-wrap img.pulsing { animation: scanPulse 1.4s infinite; }
+
+    /* Ultrasonic distance row */
+    .dist-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      background: #080c14;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .dist-icon { font-size: 20px; }
+    .dist-info { flex: 1; }
+    .dist-lbl  { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 2px; }
+    .dist-val  { font-size: 26px; font-weight: 700; transition: color 0.3s; }
+    .dist-val.ok      { color: var(--green); }
+    .dist-val.warning { color: var(--red); }
+    .dist-val.unknown { color: var(--muted); }
+    .dist-unit { font-size: 12px; font-weight: 400; opacity: 0.6; }
+    .dist-side { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .dist-bar-wrap { width: 56px; height: 6px; background: var(--border2); border-radius: 3px; overflow: hidden; }
+    .dist-bar  { height: 100%; border-radius: 3px; transition: width 0.3s, background 0.3s; background: var(--green); }
+    .dist-bar.warning { background: var(--red); }
+    .dist-badge {
+      font-size: 9px; font-weight: 700; letter-spacing: 1px;
+      padding: 2px 8px; border-radius: 10px; white-space: nowrap;
+    }
+    .dist-badge.ok      { background: #082a18; color: var(--green); }
+    .dist-badge.warning { background: #2a0808; color: var(--red); }
+    .dist-badge.unknown { background: var(--border); color: var(--muted); }
+
     /* ════════════════════════════════════════════════════
        PLOTS TAB
     ════════════════════════════════════════════════════ */
@@ -281,6 +348,28 @@
     <div class="card cmd-box">
       <div class="cmd-val stopped" id="cmd-display">IDLE</div>
       <div id="mode-pill" class="mode-pill pill-manual">MANUAL MODE</div>
+    </div>
+
+    <!-- ── CAMERA / QR SCAN PANEL ────────────────────────────── -->
+    <div class="card cam-panel" id="cam-panel">
+      <h2>📷 Camera Feed — QR Scanner</h2>
+      <div class="cam-feed-wrap">
+        <img id="cam-feed" src="" alt="Camera feed" />
+      </div>
+      <div class="cam-status scanning" id="cam-status">🔍 Scanning for QR code...</div>
+
+      <!-- Ultrasonic distance — reported alongside QR scan -->
+      <div class="dist-row">
+        <div class="dist-icon">📏</div>
+        <div class="dist-info">
+          <div class="dist-lbl">Ultrasonic Distance</div>
+          <div class="dist-val unknown" id="dist-val">—<span class="dist-unit"> cm</span></div>
+        </div>
+        <div class="dist-side">
+          <div class="dist-bar-wrap"><div class="dist-bar" id="dist-bar" style="width:0%"></div></div>
+          <div class="dist-badge unknown" id="dist-badge">NO DATA</div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -545,6 +634,9 @@
       else if (d.mode === "PICK")       { pill.textContent = "AUTO PICK";  pill.className = "mode-pill pill-pick"; }
       else                              { pill.textContent = "MANUAL";     pill.className = "mode-pill pill-manual"; }
 
+      // ── Camera / QR scan panel ──
+      updateCamPanel(d);
+
       // ── Arrow highlight ──
       Object.values(arrowMap).forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove("active"); });
       const ac = arrowMap[d.cmd];
@@ -589,6 +681,80 @@
       if (rpmSet && rpmAct) {
         pushRPMData(rpmSet, rpmAct);
       }
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // CAMERA / QR SCAN PANEL
+    // ══════════════════════════════════════════════════════════
+    let camRefreshTimer = null;
+
+    function updateCamPanel(d) {
+      const panel     = document.getElementById("cam-panel");
+      const feedImg   = document.getElementById("cam-feed");
+      const statusEl  = document.getElementById("cam-status");
+      const distValEl = document.getElementById("dist-val");
+      const distBarEl = document.getElementById("dist-bar");
+      const distBadge = document.getElementById("dist-badge");
+
+      const status = d.pick_status || "idle";
+
+      if (status === "scanning" || status === "found") {
+        panel.classList.add("visible");
+
+        // --- Camera image refresh ---
+        if (status === "scanning") {
+          statusEl.textContent = "🔍 Scanning for QR code...";
+          statusEl.className   = "cam-status scanning";
+          feedImg.classList.add("pulsing");
+
+          // Refresh JPEG snapshot every 600 ms while scanning
+          if (!camRefreshTimer && d.cam_ip) {
+            refreshCamFeed(d.cam_ip);
+            camRefreshTimer = setInterval(() => refreshCamFeed(d.cam_ip), 600);
+          }
+        } else {
+          // found
+          const color = d.pick_color || "?";
+          statusEl.textContent = "✅ QR Detected: " + color.toUpperCase();
+          statusEl.className   = "cam-status found";
+          feedImg.classList.remove("pulsing");
+
+          // Stop auto-refresh once found
+          if (camRefreshTimer) { clearInterval(camRefreshTimer); camRefreshTimer = null; }
+        }
+
+        // --- Ultrasonic distance ---
+        const dist = (d.dist !== undefined) ? d.dist : -1;
+        if (dist >= 0) {
+          const isWarning = dist > 20;
+          const cls = isWarning ? "warning" : "ok";
+          distValEl.innerHTML  = dist.toFixed(1) + '<span class="dist-unit"> cm</span>';
+          distValEl.className  = "dist-val " + cls;
+          distBarEl.style.width = Math.min(100, (dist / 50) * 100) + "%";
+          distBarEl.className  = "dist-bar" + (isWarning ? " warning" : "");
+          distBadge.textContent = isWarning ? "TOO FAR" : "IN RANGE";
+          distBadge.className  = "dist-badge " + cls;
+        } else {
+          distValEl.innerHTML  = '—<span class="dist-unit"> cm</span>';
+          distValEl.className  = "dist-val unknown";
+          distBarEl.style.width = "0%";
+          distBarEl.className  = "dist-bar";
+          distBadge.textContent = "NO DATA";
+          distBadge.className  = "dist-badge unknown";
+        }
+
+      } else {
+        // idle — hide panel and stop refresh
+        panel.classList.remove("visible");
+        feedImg.classList.remove("pulsing");
+        if (camRefreshTimer) { clearInterval(camRefreshTimer); camRefreshTimer = null; }
+      }
+    }
+
+    function refreshCamFeed(ip) {
+      const feedImg = document.getElementById("cam-feed");
+      // Cache-bust with timestamp so the browser doesn't serve a stale frame
+      feedImg.src = "http://" + ip + "/capture?t=" + Date.now();
     }
 
     // ══════════════════════════════════════════════════════════

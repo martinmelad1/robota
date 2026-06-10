@@ -23,8 +23,8 @@ extern QueueHandle_t guiMailbox;
 #define BUF_SIZE 1024
 
 // UART1 (CAM): safe pins, no conflict with motors or Serial
-#define CAM_TX 23  // GPIO23
-#define CAM_RX 5   // GPIO5
+#define CAM_TX 36  // GPIO23
+#define CAM_RX 39  // GPIO5
 
 // UART2 (ARM): safe pins, no conflict with motors or Serial
 #define ARM_TX 0   // GPIO0

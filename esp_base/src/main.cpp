@@ -22,13 +22,13 @@ QueueHandle_t armMailbox;
 TaskHandle_t BrainTask;
 TaskHandle_t WebBroadcastTask;
 
-// ── TELEMETRY BROADCAST ──────────────────────────────────────
+// -- TELEMETRY BROADCAST --------------------------------------
 void broadcastStateData() {
   String json = robotBrain.getTelemetryJSON();
   ws.textAll(json);
 }
 
-// ── WEBSOCKET HANDLER ─────────────────────────────────────────
+// -- WEBSOCKET HANDLER -----------------------------------------
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
                AwsEventType type, void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
@@ -53,7 +53,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client,
 // FreeRTOS TASKS
 
 void setupTasks() {
-  // Odometry runs at 100 Hz on Core 1 — must start before Brain
+  // Odometry runs at 100 Hz on Core 1 � must start before Brain
   xTaskCreatePinnedToCore(
       [](void *pvParameters) {
         Odometry_Init();        // calibrates IMU, ~1 s still
@@ -97,7 +97,7 @@ void setupTasks() {
   PID_StartTask();
 }
 
-// ── SETUP ─────────────────────────────────────────────────────
+// -- SETUP -----------------------------------------------------
 void setup() {
   Serial.begin(115200);
 

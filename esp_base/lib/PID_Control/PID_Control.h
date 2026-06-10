@@ -14,25 +14,23 @@
 //    Default 0.5 m/s, range 0.10 – 1.50 m/s.
 // ============================================================
 
-struct WheelGains
-{
-    float Kp, Ki, Kd;
-    WheelGains() : Kp(0.f), Ki(0.f), Kd(0.f) {}
-    WheelGains(float p, float i, float d) : Kp(p), Ki(i), Kd(d) {}
+struct WheelGains {
+  float Kp, Ki, Kd;
+  WheelGains() : Kp(0.f), Ki(0.f), Kd(0.f) {}
+  WheelGains(float p, float i, float d) : Kp(p), Ki(i), Kd(d) {}
 };
 
-struct PIDTelemetry
-{
-    // Velocity set-points and actual values (ticks/sample, signed)
-    float velSetFL, velSetFR, velSetRL, velSetRR;
-    float velActFL, velActFR, velActRL, velActRR;
-    // Gains — stored as arrays, no pointer arithmetic
-    WheelGains velGains[4];
-    // Legacy named refs kept so StateMachine JSON builder still compiles
-    WheelGains &velGainFL = velGains[0];
-    WheelGains &velGainFR = velGains[1];
-    WheelGains &velGainRL = velGains[2];
-    WheelGains &velGainRR = velGains[3];
+struct PIDTelemetry {
+  // Velocity set-points and actual values (ticks/sample, signed)
+  float velSetFL, velSetFR, velSetRL, velSetRR;
+  float velActFL, velActFR, velActRL, velActRR;
+  // Gains — stored as arrays, no pointer arithmetic
+  WheelGains velGains[4];
+  // Legacy named refs kept so StateMachine JSON builder still compiles
+  WheelGains &velGainFL = velGains[0];
+  WheelGains &velGainFR = velGains[1];
+  WheelGains &velGainRL = velGains[2];
+  WheelGains &velGainRR = velGains[3];
 };
 
 // Initialise GPIO, PWM channels, encoder ISRs, PID instances.
@@ -59,5 +57,6 @@ void PID_GetTelemetry(PIDTelemetry &t);
 void PID_SetDriveSpeed(float mps);
 float PID_GetDriveSpeed();
 
-// Convert m/s to encoder ticks per 50 ms sample (public so StateMachine can use it).
+// Convert m/s to encoder ticks per 50 ms sample (public so StateMachine can use
+// it).
 float speedToTicks(float speed_ms);
