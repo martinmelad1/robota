@@ -414,43 +414,48 @@ void MasterStateMachine::update() {
     }
     break;
   case RobotState::START_AUTO_DROP_SEQUENCE:
-    // Begin the hardcoded segment path (RED → BLUE → GREEN)
+    // Begin the 12-step encoder-only position-controller path (RED → BLUE → GREEN)
     PathPlanner_Start();
     currentState = RobotState::NAVIGATING_TO_DROP;
     break;
 
   case RobotState::NAVIGATING_TO_DROP:
     if (PathPlanner_Update()) {
-      // A DROP segment has been reached — identify the colour and tell the ARM
-      pendingDrop = PathPlanner_GetPendingAction();
-      const char *dropColor = (pendingDrop == DropAction::DROP_RED) ? "red"
-                              : (pendingDrop == DropAction::DROP_BLUE)
-                                  ? "blue"
-                                  : "green";
+      // PathPlanner_Update() returns true every tick while waiting for ACK.
+      // Only send the REACHED command ONCE on the first true return.
+      // Use pendingDrop as the sent-guard (NONE = not yet sent).
+      DropAction action = PathPlanner_GetPendingAction();
+      if (pendingDrop == DropAction::NONE && action != DropAction::NONE) {
+        pendingDrop = action;
+        const char *dropColor = (pendingDrop == DropAction::DROP_RED)  ? "red"
+                              : (pendingDrop == DropAction::DROP_BLUE) ? "blue"
+                                                                       : "green";
+        Serial.printf("SM: DROP reached — sending REACHED:%s to ARM via UART\n", dropColor);
 
-      Serial.printf("SM: DROP reached for colour '%s'\n", dropColor);
+        // Send REACHED:<color> over UART2 → arm executes full drop sequence autonomously.
+        // ARM drop SM total ≈ 7.9 s; we wait 10 s for a comfortable safety margin.
+        ARM_SendReached(dropColor);
 
-      // Tell ARM to execute full pick-from-slot + drop sequence for this
-      // colour. The ARM handles its own servo motion autonomously via
-      // REACHED:<color>.
-      ARM_SendReached(dropColor);
-
-      stateTimer = millis();
-      currentState = RobotState::WAIT_FOR_ARM_DROP;
+        stateTimer = millis();
+        currentState = RobotState::WAIT_FOR_ARM_DROP;
+      }
     }
     break;
 
   case RobotState::WAIT_FOR_ARM_DROP:
-    // Wait long enough for the ARM to complete its pick-from-slot + drop
-    // sequence. ARM sequence total ≈ 6.8 s — we wait 8 s for safety margin.
-    if (millis() - stateTimer > 8000) {
-      // Tell the path planner to advance past the drop segment
+    // Wait for the ARM to complete its drop sequence (≈ 7.9 s measured,
+    // 10 s timeout gives a comfortable margin without stalling the path).
+    if (millis() - stateTimer > 10000) {
+      Serial.println("SM: Arm drop timeout — ACKing path planner.");
+      pendingDrop = DropAction::NONE;   // clear sent-guard for next drop
+
+      // Tell the path planner to advance past the PLACE step.
       PathPlanner_AcknowledgeAction();
 
       if (PathPlanner_IsComplete()) {
         Serial.println("SM: All drops complete — returning to MANUAL.");
         currentModeStr = "MANUAL";
-        currentState = RobotState::MANUAL_MODE;
+        currentState   = RobotState::MANUAL_MODE;
       } else {
         currentState = RobotState::NAVIGATING_TO_DROP;
       }
