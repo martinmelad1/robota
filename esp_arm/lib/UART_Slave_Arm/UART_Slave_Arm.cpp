@@ -1,5 +1,6 @@
 #include "UART_Slave_Arm.h"
 #include "Servo_Control.h"
+#include "IMU.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -152,13 +153,24 @@ void UART_Arm_Task(void *arg) {
       }
     }
 
+    // Send IMU data every tick (~20ms / 50Hz)
+    if (IMU_IsReady()) {
+      char imu_msg[64];
+      float yaw = IMU_GetYaw();
+      float ax  = IMU_GetAccelX();
+      float ay  = IMU_GetAccelY();
+      snprintf(imu_msg, sizeof(imu_msg), "IMU_FB:%.2f,%.2f,%.2f\n", yaw, ax, ay);
+      uart_write_bytes(UART_PORT, imu_msg, strlen(imu_msg));
+    }
+
     // Send joint feedback every ~100ms (5 ticks of 20ms)
     if (++fb_counter >= 5) {
       fb_counter = 0;
       char fb_msg[64];
-      // Format must match what esp_base expects: JOINT_FB:j1,j2,j3
-      snprintf(fb_msg, sizeof(fb_msg), "JOINT_FB:%d.0,%d.0,%d.0\n", angle1,
-               angle2, angle3);
+
+      // Joint angles — format expected by esp_base UART_Arm_Task
+      snprintf(fb_msg, sizeof(fb_msg), "JOINT_FB:%d.0,%d.0,%d.0\n",
+               angle1, angle2, angle3);
       uart_write_bytes(UART_PORT, fb_msg, strlen(fb_msg));
     }
   }

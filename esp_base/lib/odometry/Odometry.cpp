@@ -17,8 +17,18 @@
 // ============================================================
 
 #include "Odometry.h"
+#include "UART_Master.h"   // for imu_yaw_deg
 #include <math.h>
 #include <Arduino.h>
+
+// ── Odometry IMU Flags ───────────────────────────────────────
+// ODO_USE_IMU_HEADING : Uses IMU yaw instead of encoder difference for theta.
+// ODO_USE_IMU_POSITION: Double integrates IMU accel for X,Y instead of encoders.
+static constexpr bool ODO_USE_IMU_HEADING  = false;
+static constexpr bool ODO_USE_IMU_POSITION = false;
+
+static float odo_imu_vel_x = 0.0f;
+static float odo_imu_vel_y = 0.0f;
 
 // ── Shared encoder state (defined in PID_Control.cpp) ────────
 extern volatile long ticksFL;
@@ -94,23 +104,45 @@ void Odometry_Update() {
     float dVy = (R / 4.0f) * ( p_FL + p_FR + p_RL + p_RR);
     float dW  = (R / (4.0f * L)) * (-p_FL + p_FR - p_RL + p_RR);
 
-    // ── Step 5: Heading — encoder only ───────────────────────
-    float new_theta = g_pose.theta + dW;
+    // ── Step 5: Heading ───────────────────────────────────────
+    float new_theta;
 
-    // Wrap to (-π, +π]
-    while (new_theta >  float(M_PI)) new_theta -= 2.0f * float(M_PI);
-    while (new_theta < -float(M_PI)) new_theta += 2.0f * float(M_PI);
+    if (ODO_USE_IMU_HEADING) {
+        // Convert IMU yaw (degrees, ±180) to radians matching odometry frame.
+        new_theta = (float)imu_yaw_deg * (float(M_PI) / 180.0f);
+        while (new_theta >  float(M_PI)) new_theta -= 2.0f * float(M_PI);
+        while (new_theta < -float(M_PI)) new_theta += 2.0f * float(M_PI);
+    } else {
+        // Encoder-only heading integration
+        new_theta = g_pose.theta + dW;
+        while (new_theta >  float(M_PI)) new_theta -= 2.0f * float(M_PI);
+        while (new_theta < -float(M_PI)) new_theta += 2.0f * float(M_PI);
+    }
 
-    // ── Step 6: Rotate robot-frame → world-frame ─────────────
-    // Use mid-point heading for slightly better accuracy
+    // ── Step 6: Update Global Position (X, Y) ────────────────
     float mid_theta = (g_pose.theta + new_theta) * 0.5f;
-    float dx = dVx * cosf(mid_theta) - dVy * sinf(mid_theta);
-    float dy = dVx * sinf(mid_theta) + dVy * cosf(mid_theta);
+    float cos_th = cosf(mid_theta);
+    float sin_th = sinf(mid_theta);
+
+    if (ODO_USE_IMU_POSITION) {
+        // Double integrate IMU acceleration to get world dx/dy
+        odo_imu_vel_x += imu_ax_mps2 * dt;
+        odo_imu_vel_y += imu_ay_mps2 * dt;
+        
+        // Simple friction decay to limit runaway drift when stationary
+        odo_imu_vel_x *= 0.99f;
+        odo_imu_vel_y *= 0.99f;
+
+        g_pose.x += odo_imu_vel_x * dt;
+        g_pose.y += odo_imu_vel_y * dt;
+    } else {
+        // Encoder-based forward kinematics
+        g_pose.x += (dVx * cos_th - dVy * sin_th);
+        g_pose.y += (dVx * sin_th + dVy * cos_th);
+    }
 
     // ── Step 7: Accumulate pose (mutex-protected write) ───────
     portENTER_CRITICAL(&poseMux);
-    g_pose.x     += dx;
-    g_pose.y     += dy;
     g_pose.theta  = new_theta;
     portEXIT_CRITICAL(&poseMux);
 }

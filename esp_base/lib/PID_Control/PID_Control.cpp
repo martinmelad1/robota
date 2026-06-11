@@ -3,8 +3,21 @@
 // ============================================================
 
 #include "PID_Control.h"
+#include "UART_Master.h"
 #include "WorldState.h"
 #include <PID_v1.h>
+#include "Odometry.h" // Needed to fall back to encoder yaw if PID_USE_IMU_YAW=false
+
+// ── PID IMU Flags ──────────────────────────────────────────────
+// PID_USE_IMU_VELOCITY: Blends IMU accel integration with encoder delta ticks.
+// PID_USE_IMU_YAW     : Uses IMU yaw to actively hold heading steady in PID when driving straight.
+static constexpr bool PID_USE_IMU_VELOCITY = false;
+static constexpr bool PID_USE_IMU_YAW      = false;
+
+// State variables for IMU velocity integration
+static float g_imuVelX = 0.0f;
+static float g_imuVelY = 0.0f;
+static unsigned long g_imuVelLastMs = 0;
 
 extern QueueHandle_t pidMailbox;
 
@@ -231,7 +244,28 @@ void PID_Init() {
 static double finalPWM[4] = {0, 0, 0, 0};
 
 void PID_Compute(float Vx, float Vy, float Wz) {
-  // Mecanum inverse kinematics
+  // ── 1. Optional PID Heading Hold (using Yaw) ───────────────
+  if (PID_USE_IMU_YAW) {
+      static float target_yaw = 0.0f;
+      static bool is_turning = false;
+      float current_yaw = imu_yaw_deg;
+
+      if (abs(Wz) > 0.01f) {
+          is_turning = true;
+          target_yaw = current_yaw; 
+      } else {
+          if (is_turning) {
+              target_yaw = current_yaw;
+              is_turning = false;
+          }
+          float heading_err = target_yaw - current_yaw;
+          while (heading_err > 180.0f)  heading_err -= 360.0f;
+          while (heading_err < -180.0f) heading_err += 360.0f;
+          Wz += heading_err * 0.05f; 
+      }
+  }
+
+  // ── 2. Mecanum inverse kinematics ──────────────────────────
   double tFL = (double)(Vy + Vx - Wz);
   double tFR = (double)(Vy - Vx + Wz);
   double tRL = (double)(Vy - Vx - Wz);
@@ -276,11 +310,39 @@ void PID_Compute(float Vx, float Vy, float Wz) {
     g_prevRL = curRL;
     g_prevRR = curRR;
 
-    // Apply low-pass filter natively keeping signed values
-    velAct[0] = 0.5 * velAct[0] + 0.5 * (double)dFL;
-    velAct[1] = 0.5 * velAct[1] + 0.5 * (double)dFR;
-    velAct[2] = 0.5 * velAct[2] + 0.5 * (double)dRL;
-    velAct[3] = 0.5 * velAct[3] + 0.5 * (double)dRR;
+    // ── 3. Optional PID IMU Velocity (using Accel) ───────
+    if (PID_USE_IMU_VELOCITY) {
+        unsigned long nowMs = millis();
+        float dtImu = (nowMs - g_imuVelLastMs) / 1000.0f;
+        g_imuVelLastMs = nowMs;
+        if (dtImu > 0.0f && dtImu < 0.5f) {
+            // Integrate world-frame acceleration
+            g_imuVelX += imu_ax_mps2 * dtImu;
+            g_imuVelY += imu_ay_mps2 * dtImu;
+            
+            // Apply slight friction decay
+            g_imuVelX *= 0.95f;
+            g_imuVelY *= 0.95f;
+
+            // Reset velocity if explicitly stopping
+            if (Vx == 0 && Vy == 0 && Wz == 0) {
+                g_imuVelX = 0.0f;
+                g_imuVelY = 0.0f;
+            }
+
+            // Convert IMU physical velocity into wheel ticks directly
+            velAct[0] = speedToTicks(g_imuVelY + g_imuVelX);
+            velAct[1] = speedToTicks(g_imuVelY - g_imuVelX);
+            velAct[2] = speedToTicks(g_imuVelY - g_imuVelX);
+            velAct[3] = speedToTicks(g_imuVelY + g_imuVelX);
+        }
+    } else {
+        // Apply low-pass filter natively keeping signed values
+        velAct[0] = 0.5 * velAct[0] + 0.5 * (double)dFL;
+        velAct[1] = 0.5 * velAct[1] + 0.5 * (double)dFR;
+        velAct[2] = 0.5 * velAct[2] + 0.5 * (double)dRL;
+        velAct[3] = 0.5 * velAct[3] + 0.5 * (double)dRR;
+    }
 
     // Assign Setpoints
     velSet[0] = tFL;

@@ -20,6 +20,12 @@ extern volatile float arm_j1_deg;
 extern volatile float arm_j2_deg;
 extern volatile float arm_j3_deg;
 
+// IMU data from arm (yaw in deg, accel in m/s²)
+// Updated from "IMU_FB:yaw,ax,ay" messages
+extern volatile float imu_yaw_deg;
+extern volatile float imu_ax_mps2;
+extern volatile float imu_ay_mps2;
+
 // Tasks
 void UART_Cam_Task(void *arg);
 void UART_Arm_Task(void *arg);

@@ -155,6 +155,11 @@ volatile float arm_j1_deg = 0.0f;
 volatile float arm_j2_deg = 0.0f;
 volatile float arm_j3_deg = 0.0f;
 
+// IMU from arm — updated when arm sends IMU_FB:yaw,ax,ay
+volatile float imu_yaw_deg = 0.0f;
+volatile float imu_ax_mps2 = 0.0f;
+volatile float imu_ay_mps2 = 0.0f;
+
 // ========================
 // CAMERA TASK
 // ========================
@@ -270,6 +275,17 @@ void UART_Arm_Task(void *arg)
                         arm_j2_deg = j2;
                         arm_j3_deg = j3;
                         printf("ARM joints updated: J1=%.1f J2=%.1f J3=%.1f\n", j1, j2, j3);
+                    }
+                }
+
+                // Parse IMU feedback: "IMU_FB:yaw,ax,ay"
+                char* imufbPtr = strstr((char*)data, "IMU_FB:");
+                if (imufbPtr != NULL) {
+                    float yaw = 0.0f, ax = 0.0f, ay = 0.0f;
+                    if (sscanf(imufbPtr + 7, "%f,%f,%f", &yaw, &ax, &ay) >= 1) {
+                        imu_yaw_deg = yaw;
+                        imu_ax_mps2 = ax;
+                        imu_ay_mps2 = ay;
                     }
                 }
             }
