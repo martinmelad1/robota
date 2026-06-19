@@ -5,6 +5,7 @@
 
 enum class RobotState {
     MANUAL_MODE,
+    CAMERA_PREVIEW,
     START_PICK_SEQUENCE,
     WAIT_FOR_VISION_QR,
     WAIT_FOR_ARM_PICK,
@@ -12,7 +13,6 @@ enum class RobotState {
     START_AUTO_DROP_SEQUENCE,
     NAVIGATING_TO_DROP,
     WAIT_FOR_ARM_DROP
-    // WAIT_FOR_VISION_COLOR removed — zone visual check not used
 };
 
 class MasterStateMachine {

@@ -2,11 +2,28 @@
 #define QR_READER_H
 
 #include <Arduino.h>
+#include "freertos/semphr.h"
 
-// Initializes the ESP32-CAM and the QR Code Reader
+// Initializes the camera hardware and quirc decoder.
+// Must be called once in setup().
 void QR_Reader_Init();
 
-// Scans for a QR code and returns the text if found, or an empty string if nothing was found this frame
-String QR_Reader_Scan();
+// Non-blocking: sets the scan_requested flag.
+// Call from loop() — do NOT block loop() waiting for the result.
+void QR_Reader_RequestScan();
 
-#endif
+// Call this every loop() iteration.
+// Returns true (once) when a scan result is ready.
+// Retrieve result with QR_Reader_GetResult().
+bool QR_Reader_ResultReady();
+
+// Returns the last decoded QR payload string ("red", "green", "blue", or "").
+String QR_Reader_GetResult();
+
+// Returns true while a scan task is running (camera is in grayscale mode).
+bool QR_Reader_IsScanning();
+
+// Exposes the camera mutex so the HTTP capture handler can block during scans.
+SemaphoreHandle_t QR_Reader_GetMutex();
+
+#endif // QR_READER_H

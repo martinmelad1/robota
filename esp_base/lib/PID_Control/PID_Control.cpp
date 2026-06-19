@@ -9,10 +9,13 @@
 #include "Odometry.h" // Needed to fall back to encoder yaw if PID_USE_IMU_YAW=false
 
 // ── PID IMU Flags ──────────────────────────────────────────────
-// PID_USE_IMU_VELOCITY: Blends IMU accel integration with encoder delta ticks.
-// PID_USE_IMU_YAW     : Uses IMU yaw to actively hold heading steady in PID when driving straight.
+// PID_USE_IMU_VELOCITY : Blends IMU accel integration with encoder delta ticks.
+// PID_USE_IMU_YAW      : Uses IMU yaw to hold heading direction.
+//   When true, the PID corrects speed magnitude from unsigned encoder ticks
+//   (pure wheel speed, slip-immune direction) scaled by SPEED_HEADING_GAIN.
+//   Direction is fully determined by the IMU-corrected mecanum IK outputs.
 static constexpr bool PID_USE_IMU_VELOCITY = false;
-static constexpr bool PID_USE_IMU_YAW      = false;
+static constexpr bool PID_USE_IMU_YAW      = true;
 
 // State variables for IMU velocity integration
 static float g_imuVelX = 0.0f;
@@ -122,7 +125,32 @@ static PID pidVel[4] = {PID(&velAct[0], &velOut[0], &velSet[0], velGains[0].Kp,
                             velGains[3].Ki, velGains[3].Kd, DIRECT)};
 
 static const float FF_GAIN = 1.5f;
+// Speed gain applied to unsigned encoder magnitude when PID_USE_IMU_YAW is active.
+// Runtime-adjustable via PID_SetSpeedGain() so it can be tuned from the GUI.
+static float g_speedHeadingGain = 1.0f;
 static unsigned long lastGateTime = 0;
+
+// ==========================================
+// 4b. HEADING INNER-LOOP PID
+// ==========================================
+// This is the INNER loop of the cascade:
+//   input  = heading error (degrees, wrapped ±180) — stored in hdgAct
+//   setpoint = 0 (drive error to zero)
+//   output = Wz correction (ticks/sample) — added to commanded Wz
+//
+// DIRECT mode: imu_yaw_deg increases CCW (MPU6050 right-hand Z-up convention).
+//   heading_err = target_yaw - current_yaw.
+//   Robot drifts CW → current_yaw falls → heading_err > 0 → need Wz > 0 (CCW).
+//   DIRECT: positive error → positive output → Wz correction positive ✓
+//
+// Output limits ±3.0 ticks/sample keeps the heading correction
+// gentle (adjust via PID_TUNE:hdg:0:Kp:Ki:Kd from GUI).
+static double    hdgAct   = 0.0;   // current heading error (deg, fed as input)
+static double    hdgOut_d = 0.0;   // Wz correction output (ticks/sample)
+static double    hdgSet   = 0.0;   // always 0 — drive error to zero
+static WheelGains hdgGains = {0.05f, 0.001f, 0.005f};
+static PID hdgPID(&hdgAct, &hdgOut_d, &hdgSet,
+                  hdgGains.Kp, hdgGains.Ki, hdgGains.Kd, DIRECT);
 
 // ==========================================
 // 5. DRIVE SPEED
@@ -139,14 +167,40 @@ void PID_SetDriveSpeed(float mps) {
 }
 float PID_GetDriveSpeed() { return g_driveSpeed; }
 
-// Link GUI PID Tuning to PID_v1 instances
+// PID_SetGains — routes tuning to the correct PID instance.
+//   mode 0 = outer velocity loop  (wheel 0–3 = FL/FR/RL/RR)
+//   mode 1 = inner heading loop   (wheel param ignored)
 void PID_SetGains(int mode, int wheel, float Kp, float Ki, float Kd) {
-  if (wheel < 0 || wheel > 3)
+  if (mode == 1) {
+    // Inner heading PID
+    hdgGains = {Kp, Ki, Kd};
+    hdgPID.SetTunings(Kp, Ki, Kd);
+    Serial.printf("[PID] HDG: Kp=%.3f Ki=%.3f Kd=%.3f\n", Kp, Ki, Kd);
     return;
-  // mode 0 handles velocity since position loop was deleted
+  }
+  // mode 0 = outer velocity PID per wheel
+  if (wheel < 0 || wheel > 3) return;
   velGains[wheel] = {Kp, Ki, Kd};
   pidVel[wheel].SetTunings(Kp, Ki, Kd);
   Serial.printf("[PID] VEL W%d: Kp=%.3f Ki=%.3f Kd=%.3f\n", wheel, Kp, Ki, Kd);
+}
+
+// Tune the speed magnitude gain used in IMU-heading mode (replaces the constant).
+void PID_SetSpeedGain(float gain) {
+  if (gain < 0.1f) gain = 0.1f;
+  if (gain > 5.0f) gain = 5.0f;
+  g_speedHeadingGain = gain;
+  Serial.printf("[PID] SpeedGain set to %.3f\n", g_speedHeadingGain);
+}
+float PID_GetSpeedGain() { return g_speedHeadingGain; }
+
+// Returns average actual wheel speed in m/s (unsigned, for dashboard display).
+float PID_GetAvgSpeedMps() {
+  // velAct is in ticks/sample (50 ms). Convert back to m/s.
+  // WHEEL_CIRCUM_M / ENCODER_PPR * (1000 / PID_SAMPLE_MS) = m per tick * samples/sec
+  const float TICKS_TO_MPS = WHEEL_CIRCUM_M / (float)ENCODER_PPR * (1000.0f / (float)PID_SAMPLE_MS);
+  float avg = (fabs(velAct[0]) + fabs(velAct[1]) + fabs(velAct[2]) + fabs(velAct[3])) * 0.25f;
+  return avg * TICKS_TO_MPS;
 }
 
 void PID_GetActualSpeeds(double *fl, double *fr, double *rl, double *rr) {
@@ -161,7 +215,7 @@ void PID_GetActualSpeeds(double *fl, double *fr, double *rl, double *rr) {
 }
 
 void PID_GetTelemetry(PIDTelemetry &t) {
-  // Pass latest loop data directly into telemetry
+  // Outer velocity loop data
   t.velSetFL = (float)velSet[0];
   t.velSetFR = (float)velSet[1];
   t.velSetRL = (float)velSet[2];
@@ -175,6 +229,11 @@ void PID_GetTelemetry(PIDTelemetry &t) {
   for (int i = 0; i < 4; i++) {
     t.velGains[i] = velGains[i];
   }
+
+  // Inner heading loop data (for real-time dashboard tuning graphs)
+  t.hdgErr   = (float)hdgAct;    // heading error in degrees
+  t.hdgOut   = (float)hdgOut_d;  // Wz correction output
+  t.hdgGains = hdgGains;
 }
 
 // ==========================================
@@ -213,13 +272,13 @@ void PID_Init() {
   ledcSetup(3, PWM_FREQ, PWM_RES);
   ledcAttachPin(PWM_RR, 3);
 
-  pinMode(ENC_A_FL, INPUT);
+  pinMode(ENC_A_FL, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_A_FL), isrFL_A, RISING);
-  pinMode(ENC_B_FL, INPUT);
+  pinMode(ENC_B_FL, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_B_FL), isrFL_B, RISING);
-  pinMode(ENC_A_FR, INPUT);
+  pinMode(ENC_A_FR, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_A_FR), isrFR_A, RISING);
-  pinMode(ENC_B_FR, INPUT);
+  pinMode(ENC_B_FR, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_B_FR), isrFR_B, RISING);
   pinMode(ENC_A_RL, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_A_RL), isrRL_A, RISING);
@@ -229,12 +288,21 @@ void PID_Init() {
   pinMode(ENC_B_RR, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(ENC_B_RR), isrRR_B, RISING);
 
-  // Initialize PID instances
+  // Initialize outer velocity PID instances
   for (int i = 0; i < 4; i++) {
-    pidVel[i].SetOutputLimits(-100.0, 100.0); // Limits PID correction trim
+    pidVel[i].SetOutputLimits(-100.0, 100.0); // PID correction trim ±100
     pidVel[i].SetSampleTime(PID_SAMPLE_MS);
     pidVel[i].SetMode(AUTOMATIC);
   }
+
+  // Initialize inner heading PID
+  // Output = Wz correction in ticks/sample. ±3.0 is gentle; tune Kp from GUI.
+  // Sample time = 10 ms (matches PID_Compute call rate) so the inner loop
+  // runs 5× faster than the 50 ms outer velocity gate — true cascade benefit.
+  hdgPID.SetOutputLimits(-3.0, 3.0);
+  hdgPID.SetSampleTime(10); // 10 ms — fast inner loop (PID_Compute is called every 10 ms)
+  hdgPID.SetMode(AUTOMATIC);
+
   lastGateTime = millis();
 }
 
@@ -244,24 +312,53 @@ void PID_Init() {
 static double finalPWM[4] = {0, 0, 0, 0};
 
 void PID_Compute(float Vx, float Vy, float Wz) {
-  // ── 1. Optional PID Heading Hold (using Yaw) ───────────────
+  // Save original commanded velocities BEFORE heading PID injects its Wz.
+  // Used below for 'stopped' detection so the velocity PID integrators reset
+  // correctly when the chassis is commanded to stop, regardless of any
+  // residual heading correction that might be non-zero.
+  const float Vx_cmd = Vx;
+  const float Vy_cmd = Vy;
+  const float Wz_cmd = Wz;
+
+  // ── 1. INNER LOOP: Heading PID (IMU yaw) ───────────────
+  // Runs every PID_Compute call (10 ms) — true fast inner loop.
+  // hdgPID sample time = 10 ms; outer velocity gate = 50 ms.
+  // While turning (Wz commanded): track heading, reset integrator.
+  // While translating (Vx or Vy ≠ 0): run heading PID → Wz correction.
+  // While stopped: freeze output (no integrator windup).
   if (PID_USE_IMU_YAW) {
       static float target_yaw = 0.0f;
-      static bool is_turning = false;
+      static bool  is_turning  = false;
       float current_yaw = imu_yaw_deg;
+      bool  translating = (fabs(Vx_cmd) > 0.01f || fabs(Vy_cmd) > 0.01f);
 
-      if (abs(Wz) > 0.01f) {
+      if (fabs(Wz_cmd) > 0.01f) {
+          // Intentional rotation: track heading, disable integrator to avoid windup
           is_turning = true;
-          target_yaw = current_yaw; 
+          target_yaw = current_yaw;
+          hdgPID.SetMode(MANUAL);
+          hdgOut_d = 0.0;
+          hdgPID.SetMode(AUTOMATIC);
       } else {
           if (is_turning) {
+              // Just finished a turn — lock reached heading as new target
               target_yaw = current_yaw;
               is_turning = false;
           }
-          float heading_err = target_yaw - current_yaw;
-          while (heading_err > 180.0f)  heading_err -= 360.0f;
-          while (heading_err < -180.0f) heading_err += 360.0f;
-          Wz += heading_err * 0.05f; 
+          if (translating) {
+              // Compute heading error (wrapped ±180°) and feed to inner PID
+              float heading_err = target_yaw - current_yaw;
+              while (heading_err >  180.0f) heading_err -= 360.0f;
+              while (heading_err < -180.0f) heading_err += 360.0f;
+              hdgAct = (double)heading_err; // input to heading PID
+              hdgPID.Compute();             // output -> hdgOut_d (Wz correction)
+              Wz += (float)hdgOut_d;        // inject into commanded rotation
+          } else {
+              // Stopped: freeze heading PID output, no integrator windup
+              hdgPID.SetMode(MANUAL);
+              hdgOut_d = 0.0;
+              hdgPID.SetMode(AUTOMATIC);
+          }
       }
   }
 
@@ -271,10 +368,14 @@ void PID_Compute(float Vx, float Vy, float Wz) {
   double tRL = (double)(Vy - Vx - Wz);
   double tRR = (double)(Vy + Vx + Wz);
 
-  if (tRL > 0.1)
-    global_dirRL = 1;
-  else if (tRL < -0.1)
-    global_dirRL = -1;
+  // Update RL direction under the same mutex the ISR reads it in,
+  // preventing a stale read mid-write (even though int write is atomic on LX6).
+  {
+    int new_dirRL = (tRL > 0.1) ? 1 : (tRL < -0.1) ? -1 : global_dirRL;
+    portENTER_CRITICAL(&tickMux);
+    global_dirRL = new_dirRL;
+    portEXIT_CRITICAL(&tickMux);
+  }
 
   unsigned long now = millis();
   // Execute velocity measurement and PID correction every PID_SAMPLE_MS (50ms)
@@ -310,34 +411,37 @@ void PID_Compute(float Vx, float Vy, float Wz) {
     g_prevRL = curRL;
     g_prevRR = curRR;
 
-    // ── 3. Optional PID IMU Velocity (using Accel) ───────
+    // ── 3. Actual velocity measurement ─────────────────────
     if (PID_USE_IMU_VELOCITY) {
+        // Optional: double-integrate IMU acceleration for velAct
         unsigned long nowMs = millis();
         float dtImu = (nowMs - g_imuVelLastMs) / 1000.0f;
         g_imuVelLastMs = nowMs;
         if (dtImu > 0.0f && dtImu < 0.5f) {
-            // Integrate world-frame acceleration
             g_imuVelX += imu_ax_mps2 * dtImu;
             g_imuVelY += imu_ay_mps2 * dtImu;
-            
-            // Apply slight friction decay
             g_imuVelX *= 0.95f;
             g_imuVelY *= 0.95f;
-
-            // Reset velocity if explicitly stopping
             if (Vx == 0 && Vy == 0 && Wz == 0) {
                 g_imuVelX = 0.0f;
                 g_imuVelY = 0.0f;
             }
-
-            // Convert IMU physical velocity into wheel ticks directly
             velAct[0] = speedToTicks(g_imuVelY + g_imuVelX);
             velAct[1] = speedToTicks(g_imuVelY - g_imuVelX);
             velAct[2] = speedToTicks(g_imuVelY - g_imuVelX);
             velAct[3] = speedToTicks(g_imuVelY + g_imuVelX);
         }
+    } else if (PID_USE_IMU_YAW) {
+        // IMU-heading mode: encoders give pure speed magnitude (direction = IMU).
+        // velAct = |encoder ticks| × g_speedHeadingGain (unsigned, slip-immune direction).
+        // velSet will also be unsigned so PID corrects speed only; the
+        // mecanum IK target signs (tFL/tFR/tRL/tRR) carry direction to driveMotor.
+        velAct[0] = 0.5 * velAct[0] + 0.5 * (g_speedHeadingGain * fabs((double)dFL));
+        velAct[1] = 0.5 * velAct[1] + 0.5 * (g_speedHeadingGain * fabs((double)dFR));
+        velAct[2] = 0.5 * velAct[2] + 0.5 * (g_speedHeadingGain * fabs((double)dRL));
+        velAct[3] = 0.5 * velAct[3] + 0.5 * (g_speedHeadingGain * fabs((double)dRR));
     } else {
-        // Apply low-pass filter natively keeping signed values
+        // Default encoder-only: signed IIR low-pass (direction from encoder sign)
         velAct[0] = 0.5 * velAct[0] + 0.5 * (double)dFL;
         velAct[1] = 0.5 * velAct[1] + 0.5 * (double)dFR;
         velAct[2] = 0.5 * velAct[2] + 0.5 * (double)dRL;
@@ -345,10 +449,20 @@ void PID_Compute(float Vx, float Vy, float Wz) {
     }
 
     // Assign Setpoints
-    velSet[0] = tFL;
-    velSet[1] = tFR;
-    velSet[2] = tRL;
-    velSet[3] = tRR;
+    // When using IMU heading, setpoints are unsigned magnitude (speed only)
+    // so the PID error = |target speed| - |actual speed|. Direction is
+    // handled entirely by the mecanum IK sign applied in driveMotor().
+    if (PID_USE_IMU_YAW) {
+        velSet[0] = fabs(tFL);
+        velSet[1] = fabs(tFR);
+        velSet[2] = fabs(tRL);
+        velSet[3] = fabs(tRR);
+    } else {
+        velSet[0] = tFL;
+        velSet[1] = tFR;
+        velSet[2] = tRL;
+        velSet[3] = tRR;
+    }
 
     // Maintain original variables requested
     g_velActFL = (float)velAct[0];
@@ -360,7 +474,10 @@ void PID_Compute(float Vx, float Vy, float Wz) {
     g_velSetRL = (float)tRL;
     g_velSetRR = (float)tRR;
 
-    bool stopped = (fabs(Vx) < 0.01f && fabs(Vy) < 0.01f && fabs(Wz) < 0.01f);
+    // Use original commanded velocities (before heading PID modified Wz) so
+    // the velocity PID integrators always reset when the chassis is commanded
+    // to stop, even if a residual heading correction Wz is non-zero.
+    bool stopped = (fabs(Vx_cmd) < 0.01f && fabs(Vy_cmd) < 0.01f && fabs(Wz_cmd) < 0.01f);
 
     for (int i = 0; i < 4; i++) {
       if (stopped) {
@@ -378,17 +495,19 @@ void PID_Compute(float Vx, float Vy, float Wz) {
       if (fabs(targets[i]) < 0.1) {
         finalPWM[i] = 0.0;
       } else {
-        // Combine Feed-Forward proportional base + Signed PID trimming output
-        double ff = fabs(targets[i]) * FF_GAIN;
+        // Feed-Forward proportional base + PID trim.
+        // velOut[i] is signed: positive = need more speed, negative = overspeed.
+        // We clamp (ff + velOut) to ≥ 0 before applying the direction sign so
+        // a large braking correction can never flip the motor to the wrong
+        // direction — it can only reduce PWM toward zero, not reverse it.
+        double ff   = fabs(targets[i]) * FF_GAIN;
         double sign = (targets[i] >= 0.0) ? 1.0 : -1.0;
 
-        double pwm = sign * ff + velOut[i];
-        if (pwm > 255.0)
-          pwm = 255.0;
-        if (pwm < -255.0)
-          pwm = -255.0;
+        double mag = ff + velOut[i];      // add signed PID trim to FF magnitude
+        if (mag < 0.0) mag = 0.0;        // clamp: never flip direction via PID
+        if (mag > 255.0) mag = 255.0;    // clamp upper limit
 
-        finalPWM[i] = pwm;
+        finalPWM[i] = sign * mag;
       }
     }
   }

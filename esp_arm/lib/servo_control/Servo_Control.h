@@ -84,6 +84,10 @@ extern QueueHandle_t dropSeqMailbox;
 // Called by UART_Slave_Arm when BASE sends REACHED:<color>.
 void Servo_QueueDropSequence(const char *color);
 
+void Custom_Drop_Red();
+void Custom_Drop_Blue();
+void Custom_Drop_Green();
+
 // ── Standard servo command (dashboard / manual control) ──────
 struct ServoCommand
 {

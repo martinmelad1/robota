@@ -211,6 +211,39 @@
     .dist-badge.warning { background: #2a0808; color: var(--red); }
     .dist-badge.unknown { background: var(--border); color: var(--muted); }
 
+    /* ── VELOCITY & COMPASS CARD ── */
+    .vel-card { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center; }
+    .vel-left {}
+    .vel-lbl  { font-size: 9px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 4px; }
+    .vel-num  { font-size: 44px; font-weight: 700; color: var(--green); line-height: 1; }
+    .vel-unit { font-size: 12px; color: var(--muted); }
+    .vel-dir  { font-size: 11px; color: var(--blue); margin-top: 6px; letter-spacing: 1px; }
+    /* Compass */
+    .compass  { position: relative; width: 80px; height: 80px; flex-shrink: 0; }
+    .compass svg { width: 100%; height: 100%; }
+    #compass-needle { transform-origin: 50% 75%; transition: transform 0.3s ease; }
+
+    /* ── PID TUNING CARD ── */
+    .pid-tune-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 10px; }
+    .pid-wheel-box { background: #080c14; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+    .pid-wheel-title { font-size: 9px; color: var(--green); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; font-weight: 700; }
+    .pid-row  { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+    .pid-lbl  { font-size: 10px; color: var(--muted); width: 22px; flex-shrink: 0; }
+    .pid-slider { flex: 1; -webkit-appearance: none; appearance: none; height: 4px;
+                  background: var(--border2); border-radius: 2px; outline: none; cursor: pointer; }
+    .pid-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--blue); border: 2px solid var(--bg); cursor: pointer; }
+    .pid-val  { font-size: 10px; color: var(--blue); width: 38px; text-align: right; font-weight: 700; }
+    .pid-apply-btn { display: block; width: 100%; margin-top: 8px; padding: 5px;
+      font-size: 10px; font-family: 'Courier New', monospace; letter-spacing: 1px;
+      background: #0a1a30; border: 1px solid var(--blue); border-radius: 4px;
+      color: var(--blue); cursor: pointer; text-transform: uppercase; }
+    .pid-apply-btn:hover { background: #122540; }
+    .pid-global { background: #080c14; border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+    .pid-global-title { font-size: 9px; color: var(--orange); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 8px; font-weight: 700; }
+    .pid-slider.gain::-webkit-slider-thumb { background: var(--orange); }
+    .pid-val.gain { color: var(--orange); }
+
     /* ════════════════════════════════════════════════════
        PLOTS TAB
     ════════════════════════════════════════════════════ */
@@ -351,12 +384,11 @@
     </div>
 
     <!-- ── CAMERA / QR SCAN PANEL ────────────────────────────── -->
-    <div class="card cam-panel" id="cam-panel">
-      <h2>📷 Camera Feed — QR Scanner</h2>
-      <div class="cam-feed-wrap">
-        <img id="cam-feed" src="" alt="Camera feed" />
-      </div>
-      <div class="cam-status scanning" id="cam-status">🔍 Scanning for QR code...</div>
+    <div class="card" id="cam-panel" style="display:none; text-align:center;">
+  <h2>📷 Camera Feed — Auto Pick</h2>
+  <img id="cam-feed" src="" style="display:none; width:100%; max-width:480px; border-radius:8px; border:2px solid #2d3150;">
+  
+  <div id="cam-status" style="margin-top:8px; font-size:14px; color:#a78bfa;">Previewing...</div>
 
       <!-- Ultrasonic distance — reported alongside QR scan -->
       <div class="dist-row">
@@ -408,6 +440,37 @@
       </div>
     </div>
 
+    <!-- ── VELOCITY & DIRECTION CARD ───────────────────────── -->
+    <div class="card">
+      <h2>⚡ Velocity &amp; Direction</h2>
+      <div class="vel-card">
+        <div class="vel-left">
+          <div class="vel-lbl">Speed</div>
+          <div class="vel-num" id="vel-num">0.000</div>
+          <div class="vel-unit">m/s</div>
+          <div class="vel-dir" id="vel-dir">HDG: 0.0°</div>
+        </div>
+        <div class="compass">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="46" fill="none" stroke="#1a2235" stroke-width="2"/>
+            <text x="50" y="10" text-anchor="middle" fill="#4a5878" font-size="9" font-family="monospace">N</text>
+            <text x="92" y="54" text-anchor="middle" fill="#4a5878" font-size="9" font-family="monospace">E</text>
+            <text x="50" y="97" text-anchor="middle" fill="#4a5878" font-size="9" font-family="monospace">S</text>
+            <text x="8"  y="54" text-anchor="middle" fill="#4a5878" font-size="9" font-family="monospace">W</text>
+            <line x1="50" y1="16" x2="50" y2="22" stroke="#243050" stroke-width="1"/>
+            <line x1="84" y1="50" x2="78" y2="50" stroke="#243050" stroke-width="1"/>
+            <line x1="50" y1="84" x2="50" y2="78" stroke="#243050" stroke-width="1"/>
+            <line x1="16" y1="50" x2="22" y2="50" stroke="#243050" stroke-width="1"/>
+            <g id="compass-needle">
+              <polygon points="50,22 46,50 54,50" fill="#ff4560"/>
+              <polygon points="50,78 46,50 54,50" fill="#c8d8f0" opacity="0.5"/>
+            </g>
+            <circle cx="50" cy="50" r="4" fill="#00e5a0"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
     <div class="card">
       <h2>Wheel speeds (encoder ticks/sample)</h2>
       <div class="wheel-grid">
@@ -447,6 +510,80 @@
       <div class="joint-row"><span class="jlbl">J3</span>
         <div class="jbar-wrap"><div class="jbar" id="j3-bar" style="width:50%"></div></div>
         <span class="jval" id="j3">90°</span>
+      </div>
+    </div>
+
+    <!-- ── PID TUNING CARD ──────────────────────────────────── -->
+    <div class="card">
+      <h2>🎛 PID Tuning</h2>
+      <div class="pid-tune-grid">
+        <!-- FL -->
+        <div class="pid-wheel-box">
+          <div class="pid-wheel-title">FL</div>
+          <div class="pid-row"><span class="pid-lbl">Kp</span><input type="range" class="pid-slider" id="FL-kp" min="0" max="10" step="0.05" value="2.5" oninput="pidSlider('FL','kp',this.value)"><span class="pid-val" id="FL-kp-val">2.500</span></div>
+          <div class="pid-row"><span class="pid-lbl">Ki</span><input type="range" class="pid-slider" id="FL-ki" min="0" max="10" step="0.05" value="2.0" oninput="pidSlider('FL','ki',this.value)"><span class="pid-val" id="FL-ki-val">2.000</span></div>
+          <div class="pid-row"><span class="pid-lbl">Kd</span><input type="range" class="pid-slider" id="FL-kd" min="0" max="2" step="0.01" value="0.0" oninput="pidSlider('FL','kd',this.value)"><span class="pid-val" id="FL-kd-val">0.000</span></div>
+          <button class="pid-apply-btn" onclick="applyPID('FL')">Apply FL</button>
+        </div>
+        <!-- FR -->
+        <div class="pid-wheel-box">
+          <div class="pid-wheel-title">FR</div>
+          <div class="pid-row"><span class="pid-lbl">Kp</span><input type="range" class="pid-slider" id="FR-kp" min="0" max="10" step="0.05" value="2.5" oninput="pidSlider('FR','kp',this.value)"><span class="pid-val" id="FR-kp-val">2.500</span></div>
+          <div class="pid-row"><span class="pid-lbl">Ki</span><input type="range" class="pid-slider" id="FR-ki" min="0" max="10" step="0.05" value="2.0" oninput="pidSlider('FR','ki',this.value)"><span class="pid-val" id="FR-ki-val">2.000</span></div>
+          <div class="pid-row"><span class="pid-lbl">Kd</span><input type="range" class="pid-slider" id="FR-kd" min="0" max="2" step="0.01" value="0.0" oninput="pidSlider('FR','kd',this.value)"><span class="pid-val" id="FR-kd-val">0.000</span></div>
+          <button class="pid-apply-btn" onclick="applyPID('FR')">Apply FR</button>
+        </div>
+        <!-- RL -->
+        <div class="pid-wheel-box">
+          <div class="pid-wheel-title">RL</div>
+          <div class="pid-row"><span class="pid-lbl">Kp</span><input type="range" class="pid-slider" id="RL-kp" min="0" max="10" step="0.05" value="2.5" oninput="pidSlider('RL','kp',this.value)"><span class="pid-val" id="RL-kp-val">2.500</span></div>
+          <div class="pid-row"><span class="pid-lbl">Ki</span><input type="range" class="pid-slider" id="RL-ki" min="0" max="10" step="0.05" value="2.0" oninput="pidSlider('RL','ki',this.value)"><span class="pid-val" id="RL-ki-val">2.000</span></div>
+          <div class="pid-row"><span class="pid-lbl">Kd</span><input type="range" class="pid-slider" id="RL-kd" min="0" max="2" step="0.01" value="0.0" oninput="pidSlider('RL','kd',this.value)"><span class="pid-val" id="RL-kd-val">0.000</span></div>
+          <button class="pid-apply-btn" onclick="applyPID('RL')">Apply RL</button>
+        </div>
+        <!-- RR -->
+        <div class="pid-wheel-box">
+          <div class="pid-wheel-title">RR</div>
+          <div class="pid-row"><span class="pid-lbl">Kp</span><input type="range" class="pid-slider" id="RR-kp" min="0" max="10" step="0.05" value="2.5" oninput="pidSlider('RR','kp',this.value)"><span class="pid-val" id="RR-kp-val">2.500</span></div>
+          <div class="pid-row"><span class="pid-lbl">Ki</span><input type="range" class="pid-slider" id="RR-ki" min="0" max="10" step="0.05" value="2.0" oninput="pidSlider('RR','ki',this.value)"><span class="pid-val" id="RR-ki-val">2.000</span></div>
+          <div class="pid-row"><span class="pid-lbl">Kd</span><input type="range" class="pid-slider" id="RR-kd" min="0" max="2" step="0.01" value="0.0" oninput="pidSlider('RR','kd',this.value)"><span class="pid-val" id="RR-kd-val">0.000</span></div>
+          <button class="pid-apply-btn" onclick="applyPID('RR')">Apply RR</button>
+        </div>
+      </div>
+      <!-- Global gains -->
+      <div class="pid-global">
+        <div class="pid-global-title">Global Gains</div>
+        <div class="pid-row">
+          <span class="pid-lbl" style="width:80px;color:var(--orange)">Spd Gain</span>
+          <input type="range" class="pid-slider gain" id="speed-gain-slider" min="0.1" max="3" step="0.05" value="1.0" oninput="speedGainSlider(this.value)">
+          <span class="pid-val gain" id="speed-gain-val">1.000</span>
+        </div>
+        <button class="pid-apply-btn" onclick="applyAllWheels()" style="border-color:var(--orange);color:var(--orange);background:#1a0a00">Apply ALL Wheels</button>
+      </div>
+
+      <!-- ── HEADING (INNER LOOP) PID ────────────────────── -->
+      <div class="pid-global" style="margin-top:10px;border-color:#9b72ff">
+        <div class="pid-global-title" style="color:var(--purple)">&#x1f9ed; Heading PID (Inner Loop)</div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:8px;">input=IMU yaw err &rarr; output=Wz correction &bull; cmd: PID_TUNE:hdg:0:Kp:Ki:Kd</div>
+        <div class="pid-row">
+          <span class="pid-lbl" style="color:var(--purple)">Kp</span>
+          <input type="range" class="pid-slider" id="hdg-kp" min="0" max="0.5" step="0.005" value="0.05"
+            oninput="document.getElementById('hdg-kp-val').textContent=parseFloat(this.value).toFixed(3)" style="accent-color:var(--purple)">
+          <span class="pid-val" id="hdg-kp-val" style="color:var(--purple)">0.050</span>
+        </div>
+        <div class="pid-row">
+          <span class="pid-lbl" style="color:var(--purple)">Ki</span>
+          <input type="range" class="pid-slider" id="hdg-ki" min="0" max="0.1" step="0.001" value="0.001"
+            oninput="document.getElementById('hdg-ki-val').textContent=parseFloat(this.value).toFixed(3)" style="accent-color:var(--purple)">
+          <span class="pid-val" id="hdg-ki-val" style="color:var(--purple)">0.001</span>
+        </div>
+        <div class="pid-row">
+          <span class="pid-lbl" style="color:var(--purple)">Kd</span>
+          <input type="range" class="pid-slider" id="hdg-kd" min="0" max="0.1" step="0.001" value="0.005"
+            oninput="document.getElementById('hdg-kd-val').textContent=parseFloat(this.value).toFixed(3)" style="accent-color:var(--purple)">
+          <span class="pid-val" id="hdg-kd-val" style="color:var(--purple)">0.005</span>
+        </div>
+        <button class="pid-apply-btn" onclick="applyHdgPID()" style="border-color:var(--purple);color:var(--purple);background:#110a20">Apply Heading PID</button>
       </div>
     </div>
 
@@ -554,6 +691,24 @@
       </div>
 
     </div><!-- /rpm-grid -->
+
+    <!-- ── HEADING ERROR CHART (inner-loop tuning) ────────────── -->
+    <div class="plot-box" style="margin-top:10px;">
+      <div class="plot-header">
+        <div class="plot-title">&#x1f9ed; Heading PID — Inner Loop</div>
+        <div class="plot-rpm-now" id="hdg-err-now" style="color:#9b72ff">0.0&deg; err</div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);margin-bottom:6px;">Purple = heading error (deg) &bull; Green = Wz correction (ticks/sample)</div>
+      <div class="plot-inner">
+        <div class="plot-y-label">deg / ticks</div>
+        <div class="chart-wrap"><canvas id="ch-hdg"></canvas></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-item"><div class="legend-dot" style="background:#9b72ff"></div>Hdg Error (deg)</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#00e5a0"></div>Wz Correction</div>
+      </div>
+    </div>
+
   </div><!-- /tab-plots -->
 
   <script>
@@ -647,6 +802,29 @@
       document.getElementById("py").textContent  = (d.py  || 0).toFixed(3);
       document.getElementById("hdg").textContent = (d.hdg || 0).toFixed(1);
 
+      // ── Velocity & Direction ──
+      const velEl = document.getElementById("vel-num");
+      const velMps = d.vel_mps || 0;
+      velEl.textContent = velMps.toFixed(3);
+      // Color: green if moving, muted if still
+      velEl.style.color = velMps > 0.01 ? 'var(--green)' : 'var(--muted)';
+
+      const imuHdg = d.imu_hdg || 0;
+      document.getElementById("vel-dir").textContent = 'HDG: ' + imuHdg.toFixed(1) + '°';
+      // Rotate compass needle: IMU yaw 0=forward (N on compass), CW positive
+      const needle = document.getElementById("compass-needle");
+      if (needle) needle.setAttribute('transform', `rotate(${imuHdg}, 50, 50)`);
+
+      // ── Sync speed-gain slider from firmware (one-shot, not every frame) ──
+      if (d.speed_gain !== undefined) {
+        const sg = parseFloat(d.speed_gain);
+        const sl = document.getElementById('speed-gain-slider');
+        if (sl && Math.abs(parseFloat(sl.value) - sg) > 0.04) {
+          sl.value = sg.toFixed(3);
+          document.getElementById('speed-gain-val').textContent = sg.toFixed(3);
+        }
+      }
+
       // ── Wheel speed bars (ticks/sample) ──
       const tickIds = ["fl", "fr", "rl", "rr"];
       const ticks   = [d.fl || 0, d.fr || 0, d.rl || 0, d.rr || 0];
@@ -681,12 +859,61 @@
       if (rpmSet && rpmAct) {
         pushRPMData(rpmSet, rpmAct);
       }
+
+      // ── Heading inner-loop chart ──
+      if (d.hdg_err !== undefined && d.hdg_out !== undefined) {
+        pushHdgData(d.hdg_err, d.hdg_out);
+      }
+
+      // ── Sync heading PID gain sliders from firmware ──
+      if (d.hdgGains) syncHdgGains(d.hdgGains);
     }
 
     // ══════════════════════════════════════════════════════════
     // CAMERA / QR SCAN PANEL
     // ══════════════════════════════════════════════════════════
-    let camRefreshTimer = null;
+    // Uses setInterval snapshot polling (/capture on port 80).
+    // Polling is stopped IMMEDIATELY when scanning starts — clearInterval
+    // is synchronous so no race conditions. The last loaded frame freezes.
+    // The 503 response from /capture during scan is silently ignored
+    // (onerror keeps the previous frame).
+    let _camIp    = null;   // current camera IP
+    let _camTimer = null;   // setInterval handle (null = stopped)
+    let _camBusy  = false;  // true while a fetch is in-flight (skip interval tick)
+
+    function _camFetch() {
+      if (!_camIp || _camBusy) return;
+      const feedImg = document.getElementById("cam-feed");
+      if (!feedImg) return;
+      _camBusy = true;
+
+      // AbortSignal.timeout gives a hard 2-second deadline.
+      // Without this, if the ESP camera server stops responding (e.g. right
+      // after a failed scan reinit), the request hangs indefinitely and
+      // _camBusy stays true forever — killing the feed permanently.
+      fetch("http://" + _camIp + "/capture?" + Date.now(),
+            { signal: AbortSignal.timeout(2000) })
+        .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+        .then(blob => {
+          const objUrl = URL.createObjectURL(blob);
+          feedImg.onload = () => URL.revokeObjectURL(objUrl);
+          feedImg.src          = objUrl;
+          feedImg.style.display = "block";
+        })
+        .catch(() => { /* 503 during scan / timeout / network error — keep last frame */ })
+        .finally(() => { _camBusy = false; });  // ALWAYS clears, no stuck flag
+    }
+
+    function _camStartPolling() {
+      if (_camTimer) return;                         // already running
+      _camFetch();                                   // immediate first frame
+      _camTimer = setInterval(_camFetch, 300);       // then every 300 ms
+    }
+
+    function _camStopPolling() {
+      if (_camTimer) { clearInterval(_camTimer); _camTimer = null; }
+      // Any in-flight fetch will still complete and its finally() will clear _camBusy.
+    }
 
     function updateCamPanel(d) {
       const panel     = document.getElementById("cam-panel");
@@ -698,64 +925,71 @@
 
       const status = d.pick_status || "idle";
 
-      if (status === "scanning" || status === "found") {
-        panel.classList.add("visible");
+      // Track IP changes — restart polling if cam moves to a new IP
+      if (d.cam_ip && d.cam_ip !== _camIp) {
+        _camIp = d.cam_ip;
+        _camStopPolling();
+        _camBusy = false;
+      }
 
-        // --- Camera image refresh ---
-        if (status === "scanning") {
+      if (status === "preview" || status === "scanning" || status === "found") {
+        panel.classList.add("visible");
+        panel.style.display = "block";
+
+        if (status === "preview") {
+          // ── Live feed: start polling ─────────────────────────────────────
+          _camBusy = false;          // defensive: clear any stuck flag from previous cycle
+          if (_camIp) _camStartPolling();
+          statusEl.textContent = "📷 Preview — Waiting for Scan command...";
+          statusEl.className   = "cam-status";
+          feedImg.classList.remove("pulsing");
+
+        } else if (status === "scanning") {
+          // ── SCANNING: stop polling immediately — last frame freezes ──────
+          _camStopPolling();
           statusEl.textContent = "🔍 Scanning for QR code...";
           statusEl.className   = "cam-status scanning";
           feedImg.classList.add("pulsing");
 
-          // Refresh JPEG snapshot every 600 ms while scanning
-          if (!camRefreshTimer && d.cam_ip) {
-            refreshCamFeed(d.cam_ip);
-            camRefreshTimer = setInterval(() => refreshCamFeed(d.cam_ip), 600);
-          }
         } else {
-          // found
+          // ── Found: stay frozen, show result ─────────────────────────────
+          _camStopPolling();
           const color = d.pick_color || "?";
           statusEl.textContent = "✅ QR Detected: " + color.toUpperCase();
           statusEl.className   = "cam-status found";
           feedImg.classList.remove("pulsing");
-
-          // Stop auto-refresh once found
-          if (camRefreshTimer) { clearInterval(camRefreshTimer); camRefreshTimer = null; }
         }
 
-        // --- Ultrasonic distance ---
+        // ── Ultrasonic distance ──────────────────────────────────────────────
         const dist = (d.dist !== undefined) ? d.dist : -1;
         if (dist >= 0) {
           const isWarning = dist > 20;
           const cls = isWarning ? "warning" : "ok";
-          distValEl.innerHTML  = dist.toFixed(1) + '<span class="dist-unit"> cm</span>';
-          distValEl.className  = "dist-val " + cls;
+          distValEl.innerHTML   = dist.toFixed(1) + '<span class="dist-unit"> cm</span>';
+          distValEl.className   = "dist-val " + cls;
           distBarEl.style.width = Math.min(100, (dist / 50) * 100) + "%";
-          distBarEl.className  = "dist-bar" + (isWarning ? " warning" : "");
+          distBarEl.className   = "dist-bar" + (isWarning ? " warning" : "");
           distBadge.textContent = isWarning ? "TOO FAR" : "IN RANGE";
-          distBadge.className  = "dist-badge " + cls;
+          distBadge.className   = "dist-badge " + cls;
         } else {
-          distValEl.innerHTML  = '—<span class="dist-unit"> cm</span>';
-          distValEl.className  = "dist-val unknown";
+          distValEl.innerHTML   = '—<span class="dist-unit"> cm</span>';
+          distValEl.className   = "dist-val unknown";
           distBarEl.style.width = "0%";
-          distBarEl.className  = "dist-bar";
+          distBarEl.className   = "dist-bar";
           distBadge.textContent = "NO DATA";
-          distBadge.className  = "dist-badge unknown";
+          distBadge.className   = "dist-badge unknown";
         }
 
       } else {
-        // idle — hide panel and stop refresh
+        // ── Idle: stop polling and hide panel ────────────────────────────────
+        _camStopPolling();
+        _camBusy = false;
         panel.classList.remove("visible");
+        panel.style.display = "none";
         feedImg.classList.remove("pulsing");
-        if (camRefreshTimer) { clearInterval(camRefreshTimer); camRefreshTimer = null; }
       }
     }
 
-    function refreshCamFeed(ip) {
-      const feedImg = document.getElementById("cam-feed");
-      // Cache-bust with timestamp so the browser doesn't serve a stale frame
-      feedImg.src = "http://" + ip + "/capture?t=" + Date.now();
-    }
 
     // ══════════════════════════════════════════════════════════
     // CHART.JS — RPM CHARTS
@@ -861,9 +1095,7 @@
     // Connecting first guarantees telemetry works regardless of CDN.
     connect();
 
-    // Initialise all 4 charts immediately (before tab is visible).
-    // Chart.js is served from LittleFS synchronously so it is always
-    // available here — no try/catch needed.
+    // Initialise all 4 RPM charts + heading error chart
     const rpmCharts = {
       FL: makeRPMChart('ch-rpm-FL'),
       FR: makeRPMChart('ch-rpm-FR'),
@@ -871,8 +1103,46 @@
       RR: makeRPMChart('ch-rpm-RR'),
     };
 
+    // ── Heading error chart (inner-loop PID) ──────────────
+    const hdgCanvas = document.getElementById('ch-hdg');
+    hdgCanvas.width = 800; hdgCanvas.height = 150;
+    const hdgChart = new Chart(hdgCanvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          { label: 'Hdg Error (deg)', data: [], borderColor: '#9b72ff',
+            backgroundColor: 'rgba(155,114,255,0.07)', borderWidth: 1.8,
+            pointRadius: 0, tension: 0.35, fill: true },
+          { label: 'Wz Correction',   data: [], borderColor: '#00e5a0',
+            backgroundColor: 'rgba(0,229,160,0.05)', borderWidth: 1.8,
+            pointRadius: 0, tension: 0.35, fill: false }
+        ]
+      },
+      options: {
+        animation: false, responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: { label: ctx => ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(3) },
+            backgroundColor: '#0e1420', titleColor: '#c8d8f0',
+            bodyColor: '#4a5878', borderColor: '#243050', borderWidth: 1
+          }
+        },
+        scales: {
+          x: { display: true, grid: { color: '#111825' },
+               ticks: { color: '#4a5878', font: { size: 8 }, maxTicksLimit: 6 },
+               title: { display: true, text: 'Time (s)', color: '#4a5878', font: { size: 8 } } },
+          y: { display: true, grid: { color: '#111825' },
+               ticks: { color: '#4a5878', font: { size: 8 }, maxTicksLimit: 5 } }
+        }
+      }
+    });
+
     function resizeAllCharts() {
       Object.values(rpmCharts).forEach(c => { if (c) c.resize(); });
+      if (hdgChart) hdgChart.resize();
     }
 
     // ── Push one frame of RPM data to all 4 charts ──
@@ -905,6 +1175,23 @@
       });
     }
 
+    // ── Push one frame of heading PID data to heading chart ──
+    function pushHdgData(hdgErr, hdgOut) {
+      const timeSec = (elapsedMs / 1000).toFixed(1); // shares same time axis
+      const d = hdgChart.data;
+      d.labels.push(timeSec + 's');
+      d.datasets[0].data.push(hdgErr);   // purple: heading error
+      d.datasets[1].data.push(hdgOut);   // green:  Wz correction
+      if (d.labels.length > BUF_SIZE) {
+        d.labels.shift();
+        d.datasets[0].data.shift();
+        d.datasets[1].data.shift();
+      }
+      hdgChart.update('none');
+      const badge = document.getElementById('hdg-err-now');
+      if (badge) badge.textContent = hdgErr.toFixed(2) + '° err';
+    }
+
     // ── Controls ──
     function clearCharts() {
       Object.values(rpmCharts).forEach(c => {
@@ -913,6 +1200,11 @@
         c.data.datasets.forEach(ds => ds.data = []);
         c.update('none');
       });
+      // Also clear heading chart
+      hdgChart.data.labels = [];
+      hdgChart.data.datasets.forEach(ds => ds.data = []);
+      hdgChart.update('none');
+      document.getElementById('hdg-err-now').textContent = '0.0° err';
       elapsedMs = 0;
       ['FL','FR','RL','RR'].forEach(w => {
         const badge = document.getElementById('rpm-now-' + w);
@@ -924,6 +1216,55 @@
       BUF_SIZE = n;
       document.querySelectorAll('.buf-btn').forEach(b => b.classList.remove('active'));
       document.getElementById('buf-' + n).classList.add('active');
+    }
+
+    // ══════════════════════════════════════════════════════════
+    // PID TUNING HELPERS
+    // ══════════════════════════════════════════════════════════
+    function pidSlider(wheel, gain, val) {
+      document.getElementById(wheel + '-' + gain + '-val').textContent = parseFloat(val).toFixed(3);
+    }
+
+    function applyPID(wheel) {
+      const kp = parseFloat(document.getElementById(wheel + '-kp').value);
+      const ki = parseFloat(document.getElementById(wheel + '-ki').value);
+      const kd = parseFloat(document.getElementById(wheel + '-kd').value);
+      const cmd = 'PID_TUNE:vel:' + wheel + ':' + kp.toFixed(3) + ':' + ki.toFixed(3) + ':' + kd.toFixed(3);
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) wsConn.send(cmd);
+      console.log('[PID] Sent:', cmd);
+    }
+
+    function applyAllWheels() {
+      ['FL','FR','RL','RR'].forEach(w => applyPID(w));
+    }
+
+    function speedGainSlider(val) {
+      document.getElementById('speed-gain-val').textContent = parseFloat(val).toFixed(3);
+      const cmd = 'SPEED_GAIN:' + parseFloat(val).toFixed(3);
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) wsConn.send(cmd);
+    }
+
+    // ── Apply heading inner-loop PID gains ──
+    function applyHdgPID() {
+      const kp = parseFloat(document.getElementById('hdg-kp').value);
+      const ki = parseFloat(document.getElementById('hdg-ki').value);
+      const kd = parseFloat(document.getElementById('hdg-kd').value);
+      const cmd = 'PID_TUNE:hdg:0:' + kp.toFixed(3) + ':' + ki.toFixed(3) + ':' + kd.toFixed(3);
+      if (wsConn && wsConn.readyState === WebSocket.OPEN) wsConn.send(cmd);
+      console.log('[PID] Sent heading gains:', cmd);
+    }
+
+    // ── Sync heading gain sliders from firmware (called in updateAll) ──
+    function syncHdgGains(g) {
+      if (!g) return;
+      ['kp','ki','kd'].forEach(k => {
+        const sl = document.getElementById('hdg-' + k);
+        const vl = document.getElementById('hdg-' + k + '-val');
+        if (sl && vl && Math.abs(parseFloat(sl.value) - g['K' + k.toUpperCase()]) > 0.002) {
+          sl.value = g['K' + k.toUpperCase()].toFixed(3);
+          vl.textContent = sl.value;
+        }
+      });
     }
   </script>
 </body>

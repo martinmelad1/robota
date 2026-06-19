@@ -1,6 +1,6 @@
 #include "UART_Slave_Arm.h"
-#include "Servo_Control.h"
 #include "IMU.h"
+#include "Servo_Control.h"
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,6 +15,9 @@
 
 String latest_arm_cmd = "";
 volatile bool new_arm_cmd = false;
+
+volatile bool drop_sequence_finished = false;
+char active_drop_color[16] = "";
 
 void UART_Arm_Init() {
   uart_config_t config = {.baud_rate = 115200,
@@ -119,7 +122,19 @@ void processArmCommand(char *cmd) {
   else if (strncmp(cmd, "REACHED:", 8) == 0) {
     const char *color = cmd + 8;
     Serial.printf("[ARM] REACHED received for colour: %s\n", color);
-    Servo_QueueDropSequence(color);
+
+    // Save the colour so we know what to respond with
+    strncpy(active_drop_color, color, sizeof(active_drop_color) - 1);
+    active_drop_color[sizeof(active_drop_color) - 1] = '\0';
+
+    if (strcmp(active_drop_color, "red") == 0) {
+        Custom_Drop_Red();
+    } else if (strcmp(active_drop_color, "blue") == 0) {
+        Custom_Drop_Blue();
+    } else if (strcmp(active_drop_color, "green") == 0) {
+        Custom_Drop_Green();
+    }
+
     sendResponse("OK");
   }
 
@@ -157,9 +172,10 @@ void UART_Arm_Task(void *arg) {
     if (IMU_IsReady()) {
       char imu_msg[64];
       float yaw = IMU_GetYaw();
-      float ax  = IMU_GetAccelX();
-      float ay  = IMU_GetAccelY();
-      snprintf(imu_msg, sizeof(imu_msg), "IMU_FB:%.2f,%.2f,%.2f\n", yaw, ax, ay);
+      float ax = IMU_GetAccelX();
+      float ay = IMU_GetAccelY();
+      snprintf(imu_msg, sizeof(imu_msg), "IMU_FB:%.2f,%.2f,%.2f\n", yaw, ax,
+               ay);
       uart_write_bytes(UART_PORT, imu_msg, strlen(imu_msg));
     }
 
@@ -169,9 +185,18 @@ void UART_Arm_Task(void *arg) {
       char fb_msg[64];
 
       // Joint angles — format expected by esp_base UART_Arm_Task
-      snprintf(fb_msg, sizeof(fb_msg), "JOINT_FB:%d.0,%d.0,%d.0\n",
-               angle1, angle2, angle3);
+      snprintf(fb_msg, sizeof(fb_msg), "JOINT_FB:%d.0,%d.0,%d.0\n", angle1,
+               angle2, angle3);
       uart_write_bytes(UART_PORT, fb_msg, strlen(fb_msg));
+    }
+
+    // Check if drop sequence is marked finished
+    if (drop_sequence_finished) {
+      drop_sequence_finished = false;
+      char done_msg[32];
+      snprintf(done_msg, sizeof(done_msg), "DROP_DONE:%s", active_drop_color);
+      sendResponse(done_msg);
+      printf("[ARM] Flag flipped! Sent %s to BASE\n", done_msg);
     }
   }
 }

@@ -1,5 +1,6 @@
 #include "Servo_Control.h"
 #include "Arm_IK.h"
+#include "UART_Slave_Arm.h"
 
 // ── IK pose cache (filled by Arm_IK.cpp before each sequence) ─
 IKPoseCache gIKCache;
@@ -123,6 +124,27 @@ void Servo_QueueDropSequence(const char *color)
     {
         Serial.printf("[SERVO] Unknown colour '%s' in QueueDropSequence — ignored.\n", color);
     }
+}
+
+// ── Custom Drop Sequences ─────────────────────────────────────
+// Your friend can write their delays and servo.write() calls inside here.
+void Custom_Drop_Red() {
+    // Write logic here for Red drop
+    // e.g. servo1.write(90); delay(1000);
+
+    drop_sequence_finished = true;
+}
+
+void Custom_Drop_Blue() {
+    // Write logic here for Blue drop
+
+    drop_sequence_finished = true;
+}
+
+void Custom_Drop_Green() {
+    // Write logic here for Green drop
+
+    drop_sequence_finished = true;
 }
 
 // ── Init ──────────────────────────────────────────────────────
@@ -269,6 +291,7 @@ void Servo_Control_Task(void *arg)
                     dropPhase = DropPhase::IDLE;
                     dropFirstEntry = true;
                     Serial.println("[DROP] *** Sequence COMPLETE — IDLE ***");
+                    drop_sequence_finished = true; // Tell UART task to send DROP_DONE
                 }
                 break;
 

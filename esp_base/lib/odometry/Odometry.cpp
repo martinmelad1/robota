@@ -21,10 +21,13 @@
 #include <math.h>
 #include <Arduino.h>
 
-// ── Odometry IMU Flags ───────────────────────────────────────
-// ODO_USE_IMU_HEADING : Uses IMU yaw instead of encoder difference for theta.
-// ODO_USE_IMU_POSITION: Double integrates IMU accel for X,Y instead of encoders.
-static constexpr bool ODO_USE_IMU_HEADING  = false;
+// ── Odometry IMU Flags ───────────────────────────────────
+// ODO_USE_IMU_HEADING : IMU yaw replaces encoder dW for theta.
+//   Encoders slip on carpet/slick floors — IMU yaw is drift-free over short runs.
+//   Pairs with PID_USE_IMU_YAW so PID and odometry agree on the same heading source.
+// ODO_USE_IMU_POSITION: Double-integrates IMU accel for X,Y.
+//   Left false — accel drift is severe; encoder FK for position is more reliable.
+static constexpr bool ODO_USE_IMU_HEADING  = true;
 static constexpr bool ODO_USE_IMU_POSITION = false;
 
 static float odo_imu_vel_x = 0.0f;

@@ -31,6 +31,14 @@ struct PIDTelemetry {
   WheelGains &velGainFR = velGains[1];
   WheelGains &velGainRL = velGains[2];
   WheelGains &velGainRR = velGains[3];
+
+  // ── Inner-loop (heading) PID telemetry ──────────────────────
+  // hdgErr : current heading error fed to inner PID (degrees, ±180)
+  // hdgOut : inner PID Wz correction output (ticks/sample)
+  // hdgGains: Kp/Ki/Kd of the heading PID, updated by PID_TUNE:hdg:0:...
+  float      hdgErr;
+  float      hdgOut;
+  WheelGains hdgGains;
 };
 
 // Initialise GPIO, PWM channels, encoder ISRs, PID instances.
@@ -60,3 +68,12 @@ float PID_GetDriveSpeed();
 // Convert m/s to encoder ticks per 50 ms sample (public so StateMachine can use
 // it).
 float speedToTicks(float speed_ms);
+
+// IMU-heading speed gain: scales unsigned encoder magnitude in PID_USE_IMU_YAW mode.
+// Default 1.0. GUI command: SPEED_GAIN:x.xxx
+void  PID_SetSpeedGain(float gain);
+float PID_GetSpeedGain();
+
+// Returns average actual wheel speed across all 4 wheels in m/s (unsigned).
+// Used for velocity display on the dashboard.
+float PID_GetAvgSpeedMps();

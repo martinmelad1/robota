@@ -14,6 +14,9 @@ extern volatile float ultrasonic_distance_cm;
 extern volatile float arm_j1_deg;
 extern volatile float arm_j2_deg;
 extern volatile float arm_j3_deg;
+extern volatile float imu_yaw_deg;
+extern volatile float imu_ax_mps2;
+extern volatile float imu_ay_mps2;
 
 FieldBox field_boxes[TOTAL_TARGETS] = {{"QR_1", "red", 0.0, 0.0, false},
                                        {"QR_2", "green", 0.0, 0.0, false},
@@ -50,8 +53,8 @@ String MasterStateMachine::getTelemetryJSON() {
   PID_GetTelemetry(pid);
 
   // Convert ticks/sample → RPM
-  // PID_Compute is called every 10 ms; encoder PPR = 748
-  const float TICKS_TO_RPM = 60000.0f / (748.0f * 10.0f); // = 8.0214...
+  // PID_Compute sample time is PID_SAMPLE_MS (50 ms); encoder PPR = 748
+  const float TICKS_TO_RPM = 60000.0f / (748.0f * 50.0f);
   float rpmSetFL = pid.velSetFL * TICKS_TO_RPM;
   float rpmSetFR = pid.velSetFR * TICKS_TO_RPM;
   float rpmSetRL = pid.velSetRL * TICKS_TO_RPM;
@@ -62,7 +65,9 @@ String MasterStateMachine::getTelemetryJSON() {
   float rpmActRR = pid.velActRR * TICKS_TO_RPM;
 
   String pickStatus = "idle";
-  if (currentState == RobotState::START_PICK_SEQUENCE ||
+  if (currentState == RobotState::CAMERA_PREVIEW) {
+    pickStatus = "preview";
+  } else if (currentState == RobotState::START_PICK_SEQUENCE ||
       currentState == RobotState::WAIT_FOR_VISION_QR) {
     pickStatus = "scanning";
   } else if (currentState == RobotState::WAIT_FOR_ARM_PICK ||
@@ -115,12 +120,27 @@ String MasterStateMachine::getTelemetryJSON() {
   json += "\"j2\":" + String(arm_j2_deg, 1) + ",";
   json += "\"j3\":" + String(arm_j3_deg, 1) + ",";
   json += "\"grip\":1,";
-  json += "\"dist\":" + String(ultrasonic_distance_cm, 2);
+  json += "\"dist\":" + String(ultrasonic_distance_cm, 2) + ",";
+
+  // ── Velocity & Direction (new) ───────────────────────────────
+  json += "\"vel_mps\":" + String(PID_GetAvgSpeedMps(), 3) + ",";
+  json += "\"imu_hdg\":" + String(imu_yaw_deg, 1) + ",";
+  json += "\"speed_gain\":" + String(PID_GetSpeedGain(), 3) + ",";
+
+  // ── Heading (inner) PID loop telemetry ─────────────────────────
+  // hdg_err : current heading error (deg) — inner PID input
+  // hdg_out : Wz correction output — inner PID output
+  // hdgGains: current Kp/Ki/Kd of the heading PID
+  json += "\"hdg_err\":" + String(pid.hdgErr, 2) + ",";
+  json += "\"hdg_out\":" + String(pid.hdgOut, 3) + ",";
+  json += "\"hdgGains\":" + gainsJSON(pid.hdgGains);
   json += "}";
   return json;
 }
 
 static void parsePIDTune(const String &cmd) {
+  // Format: PID_TUNE:vel:FL:Kp:Ki:Kd  (outer velocity loop, per wheel)
+  //         PID_TUNE:hdg:0:Kp:Ki:Kd   (inner heading loop, wheel ignored)
   String parts[6];
   int count = 0, start = 0;
   for (int i = 0; i <= (int)cmd.length() && count < 6; i++) {
@@ -132,18 +152,18 @@ static void parsePIDTune(const String &cmd) {
   if (count < 6)
     return;
 
+  // Determine mode from parts[1]
   int mode = 0;
-  int wheel = -1;
-  if (parts[2] == "FL")
-    wheel = 0;
-  else if (parts[2] == "FR")
-    wheel = 1;
-  else if (parts[2] == "RL")
-    wheel = 2;
-  else if (parts[2] == "RR")
-    wheel = 3;
-  if (wheel < 0)
-    return;
+  if (parts[1] == "hdg") mode = 1;
+
+  int wheel = 0; // only used when mode==0
+  if (mode == 0) {
+    if      (parts[2] == "FL") wheel = 0;
+    else if (parts[2] == "FR") wheel = 1;
+    else if (parts[2] == "RL") wheel = 2;
+    else if (parts[2] == "RR") wheel = 3;
+    else return; // unknown wheel
+  }
 
   PID_SetGains(mode, wheel, parts[3].toFloat(), parts[4].toFloat(),
                parts[5].toFloat());
@@ -165,6 +185,12 @@ void MasterStateMachine::update() {
     if (cmdStr.startsWith("SPEED:")) {
       float spd = cmdStr.substring(6).toFloat();
       PID_SetDriveSpeed(spd);
+      continue;
+    }
+
+    if (cmdStr.startsWith("SPEED_GAIN:")) {
+      float gain = cmdStr.substring(11).toFloat();
+      PID_SetSpeedGain(gain);
       continue;
     }
 
@@ -235,6 +261,13 @@ void MasterStateMachine::update() {
       isArmCmd = true;
       mode_trigger = GUITrigger::TRIGGER_MANUAL;
       currentModeStr = "MANUAL";
+    } else if (cmdStr == "SHOW_CAM") {
+      if (currentState == RobotState::MANUAL_MODE) {
+        base_motion.move_type = DriveCommand::CMD_STOP;
+        isChassisCmd = true;
+        currentState = RobotState::CAMERA_PREVIEW;
+        currentModeStr = "PICK";
+      }
     } else if (cmdStr == "MODE_MANUAL") {
       mode_trigger = GUITrigger::TRIGGER_MANUAL;
       currentModeStr = "MANUAL";
@@ -325,6 +358,27 @@ void MasterStateMachine::update() {
       arm_motion.joint_id = 0;
       arm_motion.direction = ArmDir::STOP;
       isArmCmd = true;
+    } else if (cmdStr.startsWith("DROP_DONE:")) {
+      String color = cmdStr.substring(10);
+      if (currentState == RobotState::WAIT_FOR_ARM_DROP) {
+        // Drop confirmed by ARM. Update slot status and move to next point.
+        for (int i = 0; i < TOTAL_TARGETS; i++) {
+          const char *targetColor = (pendingDrop == DropAction::DROP_RED)  ? "red"
+                                  : (pendingDrop == DropAction::DROP_BLUE) ? "blue"
+                                                                           : "green";
+          if (storage_unit[i].assignedColor == targetColor) {
+            storage_unit[i].isFull = false;
+            Serial.println(String("SM: Slot ") + targetColor + " marked EMPTY (Confirmed by ARM: " + color + ").");
+            if (String(targetColor) != color) {
+              Serial.println("WARNING: ARM reported different color drop than expected!");
+            }
+            break;
+          }
+        }
+        pendingDrop = DropAction::NONE;
+        PathPlanner_AcknowledgeAction();
+        currentState = RobotState::NAVIGATING_TO_DROP;
+      }
     } else if (cmdStr.startsWith("QR_OK:")) {
       String color = cmdStr.substring(6);
       if (currentState == RobotState::WAIT_FOR_VISION_QR) {
@@ -353,18 +407,26 @@ void MasterStateMachine::update() {
     }
 
     if (mode_trigger == GUITrigger::TRIGGER_MANUAL &&
-        currentState != RobotState::MANUAL_MODE)
+        currentState != RobotState::MANUAL_MODE) {
       currentState = RobotState::MANUAL_MODE;
-    else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
-             currentState == RobotState::MANUAL_MODE)
+    } else if (mode_trigger == GUITrigger::TRIGGER_PICK &&
+               (currentState == RobotState::MANUAL_MODE ||
+                currentState == RobotState::CAMERA_PREVIEW)) {
       currentState = RobotState::START_PICK_SEQUENCE;
-    else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
-             currentState == RobotState::MANUAL_MODE)
+    } else if (mode_trigger == GUITrigger::TRIGGER_AUTO &&
+               currentState == RobotState::MANUAL_MODE) {
       currentState = RobotState::START_AUTO_DROP_SEQUENCE;
+    }
 
     if (currentState == RobotState::MANUAL_MODE) {
       if (isChassisCmd)
         xQueueOverwrite(pidMailbox, &base_motion);
+    }
+
+    if (currentState == RobotState::MANUAL_MODE ||
+        currentState == RobotState::CAMERA_PREVIEW ||
+        currentState == RobotState::START_PICK_SEQUENCE ||
+        currentState == RobotState::WAIT_FOR_VISION_QR) {
       if (isArmCmd)
         xQueueOverwrite(armMailbox, &arm_motion);
     }
@@ -372,6 +434,8 @@ void MasterStateMachine::update() {
 
   switch (currentState) {
   case RobotState::MANUAL_MODE:
+    break;
+  case RobotState::CAMERA_PREVIEW:
     break;
   case RobotState::START_PICK_SEQUENCE: {
     ChassisMotion stop;

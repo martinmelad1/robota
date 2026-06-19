@@ -805,6 +805,11 @@
     <div class="mode-btn mode-pick" id="btn-pick" onpointerdown="setMode('PICK')">&#x1F4E6; Auto Pick</div>
   </div>
   <div id="mode-badge" class="mode-badge badge-manual">MANUAL MODE</div>
+  
+  <div id="scan-actions" style="display:none; gap: 10px; margin-bottom: 10px;">
+    <button id="btn-start-scan" style="flex: 2; padding: 14px; background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); border: none; border-radius: 12px; color: #fff; font-size: 16px; font-weight: 700; letter-spacing: 1px; cursor: pointer;" onpointerdown="send('MODE_PICK'); this.style.opacity=0.5; this.innerText='SCANNING...';">📷 START SCAN</button>
+    <button style="flex: 1; padding: 14px; background: #2a0808; border: 1px solid var(--red); border-radius: 12px; color: var(--red); font-size: 16px; font-weight: 700; letter-spacing: 1px; cursor: pointer;" onpointerdown="setMode('MANUAL');">✖ CANCEL</button>
+  </div>
 
   <hr class="divider">
 
@@ -1024,7 +1029,7 @@
     const robotModes = {
       MANUAL: { btn: "btn-manual", badge: "MANUAL MODE", cls: "badge-manual", cmd: "MODE_MANUAL" },
       AUTO: { btn: "btn-auto", badge: "AUTONOMOUS MODE", cls: "badge-auto", cmd: "MODE_AUTO" },
-      PICK: { btn: "btn-pick", badge: "AUTO PICK MODE", cls: "badge-pick", cmd: "MODE_PICK" },
+      PICK: { btn: "btn-pick", badge: "AUTO PICK MODE", cls: "badge-pick", cmd: "SHOW_CAM" },
     };
     function setMode(mode) {
       Object.keys(robotModes).forEach(k => document.getElementById(robotModes[k].btn).classList.remove("active"));
@@ -1032,6 +1037,17 @@
       document.getElementById(m.btn).classList.add("active");
       const badge = document.getElementById("mode-badge");
       badge.textContent = m.badge; badge.className = "mode-badge " + m.cls;
+      
+      const scanActions = document.getElementById("scan-actions");
+      const scanBtn = document.getElementById("btn-start-scan");
+      if (mode === "PICK") {
+        scanActions.style.display = "flex";
+        scanBtn.style.opacity = 1;
+        scanBtn.innerText = "📷 START SCAN";
+      } else {
+        scanActions.style.display = "none";
+      }
+      
       send(m.cmd);
     }
 
